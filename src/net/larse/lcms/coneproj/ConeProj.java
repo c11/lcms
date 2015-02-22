@@ -1,16 +1,16 @@
 /*
  * Copyright (c) 2015 Zhiqiang Yang.
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -25,7 +25,6 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.apache.commons.math.stat.StatUtils;
 import org.ejml.data.DenseMatrix64F;
 import org.ejml.simple.SimpleMatrix;
-import sun.java2d.pipe.SpanShapeRenderer;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,6 +38,10 @@ import java.util.Collections;
  * URL http://www.jstatsoft.org/v61/i12/.
  *
  * @auther Zhiqiang Yang, 2/17/2015
+ *
+ * TODO: this is the first pass of implementing the algorithms, there are a lot of redundant code,
+ * which can be solidated to simplify the implementation.
+ *
  */
 public class ConeProj {
 
@@ -185,6 +188,7 @@ public class ConeProj {
 
     result = new PolarConeProjectionResult(nrep, thetahat, n - sum);
     if (nrep > (n*n-1)) {
+
       result = null;
     }
 
@@ -207,7 +211,7 @@ public class ConeProj {
    *               The default is w = NULL.
    * @return
    */
-  public static Object coneB(double[] y, SimpleMatrix delta, SimpleMatrix vmat, double[] weight) {
+  public static ConstraintConeProjectionResult coneB(double[] y, SimpleMatrix delta, SimpleMatrix vmat, double[] weight) {
     //TODO: implement weight factor
     return coneB(y, delta, vmat);
   }
@@ -225,7 +229,7 @@ public class ConeProj {
    *             independent. The default is vmat = NULL
    * @return
    */
-  public static Object coneB(double[] y, SimpleMatrix delta, SimpleMatrix vmat) {
+  public static ConstraintConeProjectionResult coneB(double[] y, SimpleMatrix delta, SimpleMatrix vmat) {
     Object result = null;
 
     SimpleMatrix nvmat = new SimpleMatrix(vmat);
@@ -238,7 +242,9 @@ public class ConeProj {
 
     SimpleMatrix ndelta = new SimpleMatrix(delta);
 
-    SimpleMatrix a, sigma;
+    //This line is just default initialization, and should not be used.
+    SimpleMatrix a = new SimpleMatrix(m, 1);
+    SimpleMatrix sigma;
     int [] h;
     int [] obs;
 
@@ -290,9 +296,9 @@ public class ConeProj {
     int nrep = 0;
     double maxB2 = StatUtils.max(b2.getMatrix().getData());
     if (maxB2 > 2 * sm) {
+      check = false;
       for (int i = 0; i < b2.getNumElements(); i++) {
-        double tmp = b2.get(i);
-        if (Math.abs(tmp -maxB2) < sm) {
+        if (Math.abs(b2.get(i) -maxB2) < sm) {
           h[i] = 1;
           break;
         }
@@ -316,7 +322,7 @@ public class ConeProj {
         int tmp = -1;
         for (int i = 0; i < h.length; i++) {
           if (h[i] == 1) {
-            avec[i] = a[++tmp];
+            avec[i] = a.get(++tmp);
           }
         }
       }
@@ -348,7 +354,7 @@ public class ConeProj {
 
       double minASub = Double.NEGATIVE_INFINITY;
       for (int i = p; i < a.getNumElements(); i++) {
-        minASub = minASub <= a[i] ? minASub : a[i];
+        minASub = minASub <= a.get(i) ? minASub : a.get(i);
       }
 
       if (minASub < (-sm)) {
@@ -356,7 +362,7 @@ public class ConeProj {
         int tmp = -1;
         for (int i = 0; i < h.length; i++) {
           if (h[i] == 1) {
-            avec[i] = a[++tmp];
+            avec[i] = a.get(++tmp);
           }
         }
 
@@ -378,32 +384,55 @@ public class ConeProj {
         check = false;
       }
       else {
+        check = true;
+        theta = xmat.transpose().mult(a);
 
-        //TODO: continue here: line 208
-//        check = 1;
-//        theta = xmat.t() * a;
-//        b2 = sigma * (ny - theta) / n;
-//
-//        if(max(b2) > 2 * sm){
-//          int i = min(obs.elem(find(b2 == max(b2))));
-//          check = 0;
-//          h(i) = 1;
-//        }
+        b2 = sigma.mult(smNY.minus(theta)).divide(n);
 
-
-
-
-
+        maxB2 = StatUtils.max(b2.getMatrix().getData());
+        if (maxB2 > 2 * sm) {
+          for (int i = 0; i < b2.getNumElements(); i++) {
+            if (Math.abs(b2.get(i) -maxB2) < sm) {
+              h[i] = 1;
+              check = false;
+              break;
+            }
+          }
+        }
       }
-
     }
 
+    double[] avec = new double[m+p];
+    int tmp = -1;
+    for (int i = 0; i < h.length; i++) {
+      if (h[i] == 1) {
+        avec[i] = a.get(++tmp);
+      }
+    }
 
-    int k = 0;
+    double[] avec_orig = new double[m+p];
+    for (int i = 0; i < p; i++) {
+      avec_orig[i] = avec[i];
+    }
 
+    for (int i = p; i < (m+p); i++) {
+      avec_orig[i] = avec[i] / scalar[i-p];
+    }
 
+    int sum = 0;
+    for (int i = 0; i < h.length; i++) {
+      sum += h[i];
+    }
 
-    return result;
+//    if(nrep > (n * n - 1)){Rcpp::Rcout << "Fail to converge in coneproj!Too many steps! Number of steps:" << nrep << std::endl;}
+//    return wrap(Rcpp::List::create(Named("yhat") = theta, Named("coefs") = avec_orig, Named("nrep") = nrep, Named("dim") = sum(h)));
+
+    if (nrep > (n*n-1)) {
+      return null;
+    }
+    else {
+      return new ConstraintConeProjectionResult(sum, theta.getMatrix().getData(), nrep, avec_orig);
+    }
   }
 
   public static int[] linspace(int n) {

@@ -54,7 +54,7 @@ public class ConstraintConeProjectionResult {
    */
   public int steps;
 
-  public PolarConeProjectionResult(double df, double[] yhat, int steps, double[] coefs) {
+  public ConstraintConeProjectionResult(double df, double[] yhat, int steps, double[] coefs) {
     this.df = df;
     this.yhat = yhat;
     this.steps = steps;
