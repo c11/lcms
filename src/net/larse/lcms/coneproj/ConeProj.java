@@ -298,7 +298,7 @@ public class ConeProj {
     if (maxB2 > 2 * sm) {
       check = false;
       for (int i = 0; i < b2.getNumElements(); i++) {
-        if (Math.abs(b2.get(i) -maxB2) < sm) {
+        if (b2.get(i) == maxB2) {
           h[i] = 1;
           break;
         }
@@ -352,7 +352,7 @@ public class ConeProj {
       a = xmat.mult(xmat.transpose()).solve(xmat.mult(smNY));
       double[] a_sub = new double[a.getNumElements()-p];
 
-      double minASub = Double.NEGATIVE_INFINITY;
+      double minASub = Double.POSITIVE_INFINITY;
       for (int i = p; i < a.getNumElements(); i++) {
         minASub = minASub <= a.get(i) ? minASub : a.get(i);
       }
@@ -366,7 +366,7 @@ public class ConeProj {
           }
         }
 
-        double minAVecSub = Double.NEGATIVE_INFINITY;
+        double minAVecSub = Double.POSITIVE_INFINITY;
         for (int i = p; i < p+m; i++) {
           minAVecSub = minAVecSub <= avec[i] ? minAVecSub : avec[i];
         }
