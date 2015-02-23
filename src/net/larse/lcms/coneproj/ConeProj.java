@@ -23,6 +23,8 @@ package net.larse.lcms.coneproj;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.apache.commons.math.stat.StatUtils;
+import org.ejml.alg.dense.decomposition.CholeskyDecomposition;
+import org.ejml.alg.dense.decomposition.DecompositionFactory;
 import org.ejml.data.DenseMatrix64F;
 import org.ejml.simple.SimpleMatrix;
 
@@ -41,6 +43,8 @@ import java.util.Collections;
  *
  * TODO: this is the first pass of implementing the algorithms, there are a lot of redundant code,
  * which can be solidated to simplify the implementation.
+ *
+ * The three projection codes share a lot of commond code, there should be a way to simplify the logic.
  *
  */
 public class ConeProj {
@@ -433,6 +437,180 @@ public class ConeProj {
     else {
       return new ConstraintConeProjectionResult(sum, theta.getMatrix().getData(), nrep, avec_orig);
     }
+  }
+
+
+  /**
+   * Given a positive definite n by n matrix Q and a constant vector c in R^n,
+   * the object is to find θ in R^n to minimize θ'Qθ - 2c'θ subject to Aθ ≥ b,
+   * for an irreducible constraint matrix A. This routine transforms into a
+   * cone projection problem for the constrained solution.
+   *
+   * To get the constrained solution to θ'Qθ - 2c'θ subject to Aθ ≥ b, this routine
+   * makes the Cholesky decomposition of Q. Let U'U = Q, and define φ = Uθ and z = U^{-1}c,
+   * where U^{-1} is the inverse of U. Then we minimize ||z - φ||^2, subject to Bφ ≥ 0,
+   * where B = AU^{-1}. It is now a cone projection problem with the constraint cone C of
+   * the form \{φ: Bφ ≥ 0 \}. This routine gives the estimation of θ, which is U^{-1} times
+   * the estimation of φ.
+   *
+   *
+   * @param q A n by n positive definite matrix.
+   * @param c A vector of length n.
+   * @param amat A m by n constraint matrix. The rows of amat must be irreducible.
+   * @param b A vector of length m. Its default value is 0.
+   * @return PolarConeProjectionResult
+   */
+  public static PolarConeProjectionResult qprog(SimpleMatrix q, double[] c, SimpleMatrix amat, double[] b) {
+    PolarConeProjectionResult result = null;
+
+    int n = c.length;
+    int m = amat.numRows();
+
+    SimpleMatrix nc = new SimpleMatrix(c.length, 1, true, c);
+    SimpleMatrix namat = new SimpleMatrix(amat);
+    SimpleMatrix nq = new SimpleMatrix(q);
+    SimpleMatrix theta0 = new SimpleMatrix(n, 1);
+    SimpleMatrix nnc = new SimpleMatrix(n, 1);
+
+    boolean constraint = false;
+    for (int i = 0; i < b.length; i++) {
+      if (b[i] != 0) {
+        constraint = true;
+        break;
+      }
+    }
+
+    if (constraint) {
+      SimpleMatrix nb = new SimpleMatrix(10,1,true, b);
+      theta0 = namat.solve(nb);
+      nnc = nc.minus(nq.mult(theta0));
+    }
+    else {
+      nnc = nc;
+    }
+
+    CholeskyDecomposition<DenseMatrix64F> chol = DecompositionFactory.chol(nq.numRows(), true);
+    if (!chol.decompose(nq.getMatrix())) {
+      throw new RuntimeException("Cholesky failed!");
+    }
+    SimpleMatrix preu = SimpleMatrix.wrap(chol.getT(null));
+
+    SimpleMatrix u = ConeProj.trimatu(preu);
+    SimpleMatrix z = u.invert().transpose().mult(nnc);
+    SimpleMatrix atil = namat.mult(u.invert());
+
+    double sm = 1e-8;
+    int[] h = new int[m];
+    int[] obs = linspace(m);
+    boolean check = false;
+
+    for (int i = 0; i < m; i++) {
+      SimpleMatrix row = atil.extractVector(true, i);
+      SimpleMatrix atilnorm = row.mult(row.transpose());
+      atil.setRow(i, 0, row.divide(atilnorm.get(0,0)).getMatrix().getData());
+    }
+
+    SimpleMatrix delta = atil.negative();
+    SimpleMatrix b2 = delta.mult(z);
+
+    SimpleMatrix phi = new SimpleMatrix(n, 1);
+
+    double maxB2 = StatUtils.max(b2.getMatrix().getData());
+    if (maxB2 > 2 * sm) {
+      for (int i = 0; i < b2.getNumElements(); i++) {
+        double tmp = b2.get(i);
+        if (b2.get(i) ==maxB2) {
+          h[i] = 1;
+          break;
+        }
+      }
+    }
+    else {
+      check = true;
+    }
+
+    int nrep = 0;
+    while (!check && nrep < (n*n)) {
+      nrep++;
+
+      IntArrayList indices = new IntArrayList();
+      for (int i = 0; i < h.length; i++) {
+        if (h[i]==1) {
+          indices.add(i);
+        }
+      }
+
+      SimpleMatrix xmat = new SimpleMatrix(indices.size(), delta.numCols());
+      for (int i = 0; i < indices.size(); i++) {
+        xmat.setRow(i, 0, delta.extractVector(true, indices.get(i)).getMatrix().getData());
+      }
+
+      SimpleMatrix a = xmat.mult(xmat.transpose()).solve(xmat.mult(z));
+      double[] avec = new double[m];
+      double minA = StatUtils.min(a.getMatrix().getData());
+      if (minA < -sm) {
+        for (int i = 0; i < indices.size(); i++) {
+          avec[indices.get(i)] = a.get(i);
+        }
+
+        double minAvec = StatUtils.min(avec);
+        IntArrayList minAvecIndex = new IntArrayList();
+        for (int i = 0; i < avec.length; i++) {
+          if (avec[i] == minAvec) {
+            minAvecIndex.add(i);
+          }
+        }
+        //TODO: check is this necessary
+        Collections.sort(minAvecIndex);
+        h[minAvecIndex.get(0)] = 0;
+        check = false;
+      }
+      else {
+        check = true;
+        phi = xmat.transpose().mult(a);
+        b2 = delta.mult(z.minus(phi)).divide(n);
+
+        maxB2 = StatUtils.max(b2.getMatrix().getData());
+        if (maxB2 > 2 * sm) {
+          for (int i = 0; i < b2.getNumElements(); i++) {
+            if (b2.get(i) == maxB2) {
+              h[i] = 1;
+              check = false;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    SimpleMatrix thetahat = u.solve(z.minus(phi));
+    if (constraint) {
+      thetahat = thetahat.plus(theta0);
+    }
+
+    if (nrep > (n*n-1)) {
+      result = null;
+    }
+    else {
+      int sum = 0;
+      for (int i = 0; i < h.length; i++) {
+        sum += h[i];
+      }
+      result = new PolarConeProjectionResult(n-sum, thetahat, nrep);
+    }
+    return result;
+  }
+
+  public static SimpleMatrix trimatu(SimpleMatrix amat) {
+    SimpleMatrix result = new SimpleMatrix(amat);
+    for (int i = 0; i < result.numRows(); i++) {
+      for (int j = 0; j < result.numCols(); j++) {
+        if (j<i) {
+          result.set(i, j, 0);
+        }
+      }
+    }
+    return result;
   }
 
   public static int[] linspace(int n) {
