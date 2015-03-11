@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Zhiqiang Yang.
+ * Copyright (c) 2015 LCMS Project Authors.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,13 +21,14 @@
  */
 package com.google.earthengine.examples.landsat;
 
+import com.google.earthengine.api.base.AlgorithmBase;
+
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math.linear.Array2DRowRealMatrix;
 import org.apache.commons.math.linear.LUDecompositionImpl;
 import org.apache.commons.math.linear.RealMatrix;
-import org.apache.commons.math.linear.RealVector;
 import org.apache.commons.math.stat.descriptive.moment.StandardDeviation;
 import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
 
@@ -40,8 +41,7 @@ import java.util.Arrays;
  * Using Statistical Quality Control Charts and Landsat Data,
  * IEEE Transaction on Geoscience and Remote Sensing, 52: 3316-3332
  *
- *
- * EWMACD is an algorithms that use Shewhart X-bar charts for change detection.
+ * EWMACD is an algorithm that uses Shewhart X-bar charts for change detection.
  *
  * @author Zhiqiang Yang, 2/14/2015
  *
@@ -49,48 +49,58 @@ import java.util.Arrays;
  *
  */
 public final class Ewmacd {
-  private static final int DEFAULT_VALUE = -2222;
-  //PARAMETER SECTION
-  private final int harmonicCount;
-  private final double xBarLimit1;
-  private final double xBarLimit2;
-  private final double vegetationThreshold;
-  private final double lambda;
-  private final double lambdasigs;
-  private final boolean rounding;
-  private final int persistence;
-  //inclusive
-  private final int trainingStartYear;
-  //exclusive
-  private final int trainingEndYear;
+  static class Args extends AlgorithmBase.ArgsBase {
+    @Doc(help = "Threshold for vegetation. Values below this are considered non-vegetation.")
+    @Required
+    double vegetationThreshold = 100;
 
-  public Ewmacd() {
-    this.harmonicCount = 2;
-    this.xBarLimit1 = 1.5;
-    this.xBarLimit2 = 20.0;
-    this.vegetationThreshold = 100;
-    this.lambda = 0.3;
-    this.lambdasigs = 3;
-    this.rounding = true;
-    this.persistence = 3;
-    this.trainingStartYear = 2005;
-    this.trainingEndYear = 2007;
+    @Doc(help = "Start year of training period, inclusive.")
+    @Required
+    // TODO(gorelick): Remove these testing defaults from the required args.
+    int trainingStartYear = 2005;
+
+    @Doc(help = "End year of training period, exclusive.")
+    @Required
+    int trainingEndYear = 2007;
+
+    @Doc(help = "Number of harmonic function pairs (sine and cosine) used.")
+    @Optional
+    int harmonicCount = 2;
+
+    @Doc(help = "Threshold for initial training xBar limit.")
+    @Optional
+    double xBarLimit1 = 1.5;
+
+    @Doc(help = "Threshold for running xBar limit.")
+    @Optional
+    int xBarLimit2 = 20;
+
+    @Doc(help = "EWMA lambda")
+    @Optional
+    double lambda = 0.3;
+
+    @Doc(help = "EWMA number of standard deviations for marking out of control.")
+    @Optional
+    double lambdasigs = 3.0;
+
+    @Doc(help = "Should rounding be performed for EWMA")
+    @Optional
+    boolean rounding = true;
+
+    @Doc(help = "Minimum number of observations needed to consider a change.")
+    @Optional
+    int persistence = 3;
   }
 
-  public Ewmacd(int harmonicCount, double xBarLimit1, double xBarLimit2,
-      double vegetationThreshold, double lambda, double lambdasigs,
-      boolean rounding, int persistence,
-      int trainingStartYear, int trainingEndYear) {
-    this.harmonicCount = harmonicCount;
-    this.xBarLimit1 = xBarLimit1;
-    this.xBarLimit2 = xBarLimit2;
-    this.vegetationThreshold = vegetationThreshold;
-    this.lambda = lambda;
-    this.lambdasigs = lambdasigs;
-    this.rounding = rounding;
-    this.persistence = persistence;
-    this.trainingStartYear = trainingStartYear;
-    this.trainingEndYear = trainingEndYear;
+  private static final int DEFAULT_VALUE = -2222;
+  private final Args args;
+
+  public Ewmacd() {
+    this(new Args());
+  }
+
+  public Ewmacd(Args args) {
+    this.args = args;
   }
 
   /**
@@ -120,13 +130,13 @@ public final class Ewmacd {
     int trainingStart = 0;
     int trainingEnd = years.length - 1;
     for (int i = 0; i < years.length; i++) {
-      if (years[i] == trainingStartYear) {
+      if (years[i] == args.trainingStartYear) {
         trainingStart = i;
         break;
       }
     }
     for (int i = trainingStart; i < years.length; i++) {
-      if (years[i] == trainingEndYear) {
+      if (years[i] == args.trainingEndYear) {
         trainingEnd = i - 1;
         break;
       }
@@ -142,7 +152,7 @@ public final class Ewmacd {
     RealMatrix fitted = all.multiply(new Array2DRowRealMatrix(betas));
 
     // NG: Residuals probably works better as an double[].
-    // YZ: Changed as suggested 
+    // YZ: Changed as suggested
     double[] residuals = new Array2DRowRealMatrix(y).subtract(fitted).getColumnVector(0).toArray();
     int trainingSize = trainingEnd-trainingStart+1;
     double[] trainingResiduals = ArrayUtils.subarray(residuals, trainingStart, trainingEnd+1);
@@ -150,7 +160,7 @@ public final class Ewmacd {
     //first estimate historical mean of residuals (should be near 0)
     // NG: This isn't a mean.
     // YZ: This is an legacy copy fro original code, Orignal implemneted calcuated the mean, but was never used.
-    // it is standard deviation that we want. 
+    // it is standard deviation that we want.
     double historicalStd = new StandardDeviation().evaluate(trainingResiduals);
 
     // Original comments:
@@ -160,10 +170,10 @@ public final class Ewmacd {
     // if training years are in the middle?
     double[] ucl0 = new double[x.length];
     for (int i = 0; i < x.length; i++) {
-      if (years[i] < trainingEndYear && years[i] >= trainingStartYear) {
-        ucl0[i] = xBarLimit1 * historicalStd;
+      if (years[i] < args.trainingEndYear && years[i] >= args.trainingStartYear) {
+        ucl0[i] = args.xBarLimit1 * historicalStd;
       } else {
-        ucl0[i] = xBarLimit2 * historicalStd;
+        ucl0[i] = args.xBarLimit2 * historicalStd;
       }
     }
 
@@ -173,10 +183,10 @@ public final class Ewmacd {
     IntArrayList usedObservations = new IntArrayList(); // this should be the final list used
 
     for (int i = 0; i < x.length; i++) {
-      if (y[i] > vegetationThreshold && Math.abs(residuals[i]) < ucl0[i]) {
+      if (y[i] > args.vegetationThreshold && Math.abs(residuals[i]) < ucl0[i]) {
         filteredResiduals.add(residuals[i]);
         // NG: validObservations[i] == i.
-        // YZ: this should be fine and preferred: validObservations maybe a redundant variable. 
+        // YZ: this should be fine and preferred: validObservations maybe a redundant variable.
         usedObservations.add(i);
       }
     }
@@ -194,7 +204,7 @@ public final class Ewmacd {
     // Updating historicalMean
     DoubleArrayList filteredTrainingResiduals = new DoubleArrayList();
     for (int i = 0; i < trainingResiduals.length; i++) {
-      if (trainingY[i] > vegetationThreshold
+      if (trainingY[i] > args.vegetationThreshold
           && Math.abs(trainingResiduals[i]) < ucl0[i]) {
         filteredTrainingResiduals.add(trainingResiduals[i]);
       }
@@ -215,15 +225,16 @@ public final class Ewmacd {
     ewma[0] = filteredResiduals.get(0);
 
     for (int i = 1; i < filteredSize; i++) {
-      ewma[i] = ewma[i - 1] * (1 - lambda) + lambda * filteredResiduals.get(i);
+      ewma[i] = ewma[i - 1] * (1 - args.lambda) + args.lambda * filteredResiduals.get(i);
     }
 
     // EWMA upper control limit.
     // This is the threshold which dictates when the chart signals a disturbance.
     double[] upperControlLimit = new double[filteredSize];
     for (int i = 0; i < filteredSize; i++) {
-      upperControlLimit[i] = historicalStd * lambdasigs
-          * Math.sqrt(lambda / (2 - lambda) * (1 - Math.pow((1 - lambda), 2 * (i + 1))));
+      upperControlLimit[i] = historicalStd * args.lambdasigs
+          * Math.sqrt(args.lambda / (2 - args.lambda) *
+              (1 - Math.pow((1 - args.lambda), 2 * (i + 1))));
     }
 
     // Integer value for EWMA output relative to control limit (rounded towards 0).
@@ -232,7 +243,7 @@ public final class Ewmacd {
     // NG: Renamed from tmp2.
     int[] signal = new int[filteredSize];
     for (int i = 0; i < filteredSize; i++) {
-      if (rounding) {
+      if (args.rounding) {
         signal[i] = (int) (Math.signum(ewma[i])
             * Math.floor(Math.abs(ewma[i] / upperControlLimit[i])));
       } else {
@@ -244,7 +255,7 @@ public final class Ewmacd {
     // NOTE(YZ): original implementation check this rules here, the check on tmp2.length should
     // happen earlier to improve performance it is redundant here, as I have moved it up right after
     // filtering the data.
-    if (persistence > 1 && filteredSize > 3) {
+    if (args.persistence > 1 && filteredSize > 3) {
       //TODO: optimize the following section
       // NG: Could compute array of signs in the previous loop.  Likely to be cleaner.
       // NG: Renamed from tmp3.
@@ -265,7 +276,7 @@ public final class Ewmacd {
         score = low + high - 1;
 
         // If sustained dates are long enough, keep; otherwise set to previous sustained state.
-        if (score >= persistence) {
+        if (score >= args.persistence) {
           sustained[i] = signal[i];
           previousKeep = i;
         } else {
@@ -322,7 +333,7 @@ public final class Ewmacd {
     Array2DRowRealMatrix matrix = constructHarmonicMatrix(trainingX);
 
     //make sure the design matrix has sufficient rank
-    if (trainingX.length < (1 + 2 * harmonicCount) && isSingular(matrix)) {
+    if (trainingX.length < (1 + 2 * args.harmonicCount) && isSingular(matrix)) {
       return null;
     }
 
@@ -339,7 +350,7 @@ public final class Ewmacd {
     //check residual from first pass of harmonic funciton
     double[] residuals = ols.estimateResiduals();
     // NG: Folded together.
-    double limit = new StandardDeviation().evaluate(residuals) * xBarLimit1;
+    double limit = new StandardDeviation().evaluate(residuals) * args.xBarLimit1;
 
     //exclude observations with large residules: xBarLimit1 * sd
     int validCount = 0;
@@ -360,10 +371,10 @@ public final class Ewmacd {
     //refit the model using filtered training data
     // NG: Shouldn't we test how many are left?
     // YZ: yes
-    if (validCount < (1+2*harmonicCount)) {
+    if (validCount < (1 + 2 * args.harmonicCount)) {
       return null;
     }
-    ols.newSampleData(samples2.toDoubleArray(), validCount, 2 * harmonicCount);
+    ols.newSampleData(samples2.toDoubleArray(), validCount, 2 * args.harmonicCount);
     return ols.estimateRegressionParameters();
   }
 
@@ -371,14 +382,14 @@ public final class Ewmacd {
   // better to make this function not add it with a arg.
   // e.g.: (double x[], boolean constantTerm)
   protected Array2DRowRealMatrix constructHarmonicMatrix(double[] x) {
-    Array2DRowRealMatrix matrix = new Array2DRowRealMatrix(x.length, 2 * harmonicCount + 1);
+    Array2DRowRealMatrix matrix = new Array2DRowRealMatrix(x.length, 2 * args.harmonicCount + 1);
 
     for (int i = 0; i < x.length; i++) {
       // NG: use setEntry instead.
       matrix.setEntry(i, 0, 1);
       double rx = x[i] * 2 * Math.PI / 365;
       //now add the harmonic terms
-      for (int h = 0; h < harmonicCount; h++) {
+      for (int h = 0; h < args.harmonicCount; h++) {
         matrix.setEntry(i, h * 2 + 1, Math.sin((h + 1) * rx));
         matrix.setEntry(i, h * 2 + 2, Math.cos((h + 1) * rx));
       }
