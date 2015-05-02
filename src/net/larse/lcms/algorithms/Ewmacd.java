@@ -21,6 +21,7 @@
  */
 package com.google.earthengine.examples.landsat;
 
+
 import com.google.earthengine.api.base.AlgorithmBase;
 
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
@@ -47,6 +48,8 @@ import java.util.Arrays;
  *
  * TODO(YZ): consolidate the use of DoubleArrayList and RealVector
  *
+ * 04/20/2015, Yang, allow number of sine and cosine harmonic to be different.
+ *
  */
 public final class Ewmacd {
   static class Args extends AlgorithmBase.ArgsBase {
@@ -63,9 +66,13 @@ public final class Ewmacd {
     @Required
     int trainingEndYear = 2007;
 
-    @Doc(help = "Number of harmonic function pairs (sine and cosine) used.")
+    @Doc(help = "Number of sine harmonic function used.")
     @Optional
-    int harmonicCount = 2;
+    int sineHarmonicCount = 2;
+
+    @Doc(help = "Number of cosine harmonic function used.")
+    @Optional
+    int cosineHarmonicCount = 2;
 
     @Doc(help = "Threshold for initial training xBar limit.")
     @Optional
@@ -154,7 +161,7 @@ public final class Ewmacd {
     // NG: Residuals probably works better as an double[].
     // YZ: Changed as suggested
     double[] residuals = new Array2DRowRealMatrix(y).subtract(fitted).getColumnVector(0).toArray();
-    int trainingSize = trainingEnd-trainingStart+1;
+    //int trainingSize = trainingEnd-trainingStart+1;
     double[] trainingResiduals = ArrayUtils.subarray(residuals, trainingStart, trainingEnd+1);
 
     //first estimate historical mean of residuals (should be near 0)
@@ -333,7 +340,7 @@ public final class Ewmacd {
     Array2DRowRealMatrix matrix = constructHarmonicMatrix(trainingX);
 
     //make sure the design matrix has sufficient rank
-    if (trainingX.length < (1 + 2 * args.harmonicCount) && isSingular(matrix)) {
+    if (trainingX.length < (1 + args.sineHarmonicCount + args.cosineHarmonicCount) && isSingular(matrix)) {
       return null;
     }
 
@@ -359,11 +366,13 @@ public final class Ewmacd {
       if (Math.abs(residuals[i]) <= limit) {
         samples2.add(trainingY[i]);
         double rx = trainingX[i] * 2 * Math.PI / 365;
-        samples2.add(Math.sin(rx));
-        samples2.add(Math.cos(rx));
-        samples2.add(Math.sin(2 * rx));
-        samples2.add(Math.cos(2 * rx));
 
+        for (int h = 1; h <= args.sineHarmonicCount; h++) {
+          samples2.add(Math.sin(h*rx));
+        }
+        for (int h = 1; h <= args.cosineHarmonicCount; h++) {
+          samples2.add(Math.cos(h*rx));
+        }
         validCount++;
       }
     }
@@ -371,10 +380,10 @@ public final class Ewmacd {
     //refit the model using filtered training data
     // NG: Shouldn't we test how many are left?
     // YZ: yes
-    if (validCount < (1 + 2 * args.harmonicCount)) {
+    if (validCount < (1 + args.sineHarmonicCount + args.cosineHarmonicCount)) {
       return null;
     }
-    ols.newSampleData(samples2.toDoubleArray(), validCount, 2 * args.harmonicCount);
+    ols.newSampleData(samples2.toDoubleArray(), validCount, args.sineHarmonicCount + args.cosineHarmonicCount);
     return ols.estimateRegressionParameters();
   }
 
@@ -382,16 +391,18 @@ public final class Ewmacd {
   // better to make this function not add it with a arg.
   // e.g.: (double x[], boolean constantTerm)
   protected Array2DRowRealMatrix constructHarmonicMatrix(double[] x) {
-    Array2DRowRealMatrix matrix = new Array2DRowRealMatrix(x.length, 2 * args.harmonicCount + 1);
+    Array2DRowRealMatrix matrix = new Array2DRowRealMatrix(x.length, args.sineHarmonicCount + args.cosineHarmonicCount + 1);
 
     for (int i = 0; i < x.length; i++) {
       // NG: use setEntry instead.
       matrix.setEntry(i, 0, 1);
       double rx = x[i] * 2 * Math.PI / 365;
       //now add the harmonic terms
-      for (int h = 0; h < args.harmonicCount; h++) {
-        matrix.setEntry(i, h * 2 + 1, Math.sin((h + 1) * rx));
-        matrix.setEntry(i, h * 2 + 2, Math.cos((h + 1) * rx));
+      for (int h = 0; h < args.sineHarmonicCount; h++) {
+        matrix.setEntry(i, h + 1, Math.sin((h + 1) * rx));
+      }
+      for (int h = 0; h < args.cosineHarmonicCount; h++) {
+        matrix.setEntry(i, args.sineHarmonicCount + h + 1, Math.cos((h + 1) * rx));
       }
     }
     return matrix;
