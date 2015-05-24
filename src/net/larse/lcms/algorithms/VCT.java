@@ -2,6 +2,9 @@ package net.larse.lcms.algorithms;
 
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Ints;
+import org.apache.commons.math.stat.descriptive.moment.Mean;
+import org.apache.commons.math.stat.descriptive.moment.StandardDeviation;
+import org.apache.commons.math.stat.regression.SimpleRegression;
 
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -33,8 +36,11 @@ import java.util.List;
  *
  * 3. Check logic when percent good is less than 50%!!!
  *
- * May 23, 2015, Z. Yang
+ *  May 23, 2015, Z. Yang
  * 4. removed inner static class VCTSolver. Together with that, changed static final method to private methods
+ *
+ *  May 24, 2015, Z. Yang
+ * 5. replace mean, standard deviation, and linearFit
  *
  */
 public class VCT {
@@ -138,14 +144,13 @@ public class VCT {
   // Input variables
   private final double maxUd;    // Maximum UD composite value for forest
   private final double minNdvi;  // Minimum NDVI value for forest
-  private double[][] ud;         // Z-scores for all bands and indices
+  private double[][] ud;         // Z-scores for all bands and indices, [NYears][B3(0), B4(1), B5(2), B7(3), BT(4), NDVI(5), DNBR(6), COMP(7)]
   private int[] mask;            // Mask (categorical) values for all years
   private int[] yearTable;       // Array to hold all years for this series
   private int numYears;          // Number of years (len of most arrays)
 
   // Characterization of input variables
   private int[] qFlag;           // QA flag for each year in the series
-
 
   //FIXME: (yang) only referenced in interpolationAndIndices(), change to local
 //    private int pctGoodObs;        // Percent of good QA flags
@@ -159,6 +164,7 @@ public class VCT {
 
   //FIXME: (yang) only used in interpolationAndIndices(), does not seem needed,
 //    private double fiRough;        // Roughness of forest index from composite
+
   private double fiRange;        // Range of forest index (= uRange)
 
   //FIXME: (yang) only used in analyzeUDist(), change to local
@@ -1073,13 +1079,15 @@ public class VCT {
 
     // If there is a forest streak, calculate statistics on this streak
     if (maxLength > 0) {
+      Mean m = new Mean();
       for (int j = 0; j < N_BANDS; j++) {
-        this.meanForUdBx[j] = getSliceMean(this.ud[j], iStart, iEnd);
+        this.meanForUdBx[j] = m.evaluate(this.ud[j], iStart, iEnd-iStart);
       }
 
       if (maxLength > 1) {
+        StandardDeviation sd = new StandardDeviation();
         for (int j = 0; j < N_BANDS; j++) {
-          this.sdForUdBx[j] = getSliceStd(this.ud[j], iStart, iEnd);
+          this.sdForUdBx[j] = sd.evaluate(this.ud[j], iStart, iEnd - iStart);
         }
       } else {
         // Calculate standard deviations using a high SD value if
@@ -1276,21 +1284,58 @@ public class VCT {
     // Fit a recovery (regrowth) regression line (B5 vs. years) from the
     // peak year to the end year. High goodness of fit value indicates
     // a very likely change
-    double[] coeff;
+//    double[] coeff;
     int distIndex = this.numDist;
-    coeff = calculateLinearChangeRate(truePeak, endYear);
-    this.regrR2[distIndex] = coeff[2];
-    this.regrSlope[distIndex] = coeff[0];
-    this.regrRough[distIndex]
-        = fiRoughness(this.ud[COMP], startYear, endYear);
 
-    // Fit a regression for the entire disturbance period
-    coeff = calculateLinearChangeRate(startYear, endYear);
-    this.distR2[distIndex] = coeff[2];
+    if (endYear - startYear < 4 || this.fiRange < 0.1) {
+      this.regrR2[distIndex] = FALSE_FIT[2];
+      this.regrSlope[distIndex] = FALSE_FIT[0];
+      this.distR2[distIndex] = FALSE_FIT[2];
+    }
+    else {
+      // Yang replace regression code
+      // Note: if common math3 can be used, this code can be simplified.
+      SimpleRegression sr = new SimpleRegression();
+      sr.addData(extractSegmentValues(truePeak, endYear));
+      this.regrR2[distIndex] = sr.getRSquare();
+      this.regrSlope[distIndex] = sr.getSlope();
+
+      // Fit a regression for the entire disturbance period
+      sr.clear();
+      sr.addData(extractSegmentValues(startYear, endYear));
+      this.distR2[distIndex] = sr.getRSquare();
+    }
+
+    //TODO: (yang) check implementation
+    this.regrRough[distIndex] = fiRoughness(this.ud[COMP], startYear, endYear);
     this.distLength[distIndex] = (int) (endYear - startYear + 1);
 
     // Increment the disturbance index
     this.numDist += 1;
+  }
+
+  /**
+   * extract segment data in ud B5 over given time span for linear fit
+   *
+   * This is based on the logic in calculateLinearChangeRate.
+   *
+   * @param start start of segment inclusive
+   * @param end end of segment inclusive
+   * @return
+   */
+  private double[][] extractSegmentValues(int start, int end) {
+    //FIXME: (yang) when will this happen?
+    //should make sure endYear always have valid data where it is assigned
+    if (end == this.numYears) {
+      end--;
+    }
+
+    double[][] result = new double[end-start+1][2];
+    for (int i = start; i <= end; i++) {
+      result[i-start][0] = this.yearTable[i] - this.yearTable[start];
+      result[i-start][1] = this.ud[B5][i];
+    }
+    return result;
   }
 
   /**
@@ -1380,40 +1425,39 @@ public class VCT {
    * @param endYear   - end year
    * @return - Regression coefficients from least squares fit
    */
-  private double[] calculateLinearChangeRate(int startYear, int endYear) {
-    // Too few observations for meaningful regression, or not much
-    // variability. Return default values
-    if (endYear - startYear < 4 || this.fiRange < 0.1) {
-      return FALSE_FIT;
-    }
-
-    // Index errors on start_year, end_year
-    // if (endYear > this.numYears || startYear < 0) {
-    //   // Handle exception
-    //   String msg = "Error: index error in calculateLinearChangeRate";
-    //   throw new Exception(msg);
-    // }
-
-    if (endYear == this.numYears) {
-      endYear--;
-    }
-
-    // Linear regression of B5 (Y) on years since disturbance (X)
-    // TODO: Reimplement using LinearLeastSquares - for now using
-    // Cheng's code for consistency
-    //
-    // TODO: Generalize this function for any index
-    int i, j;
-    double[] x = new double[this.numYears];
-    double[] y = new double[this.numYears];
-    int numObs = endYear - startYear + 1;
-    for (i = startYear; i <= endYear; i++) {
-      j = i - startYear;
-      y[j] = this.ud[B5][i];
-      x[j] = this.yearTable[i] - this.yearTable[startYear];
-    }
-    return linearFit(y, x, numObs);
-  }
+//  private double[] calculateLinearChangeRate(int startYear, int endYear) {
+//    // Too few observations for meaningful regression, or not much
+//    // variability. Return default values
+//    if (endYear - startYear < 4 || this.fiRange < 0.1) {
+//      return FALSE_FIT;
+//    }
+//
+//    // Index errors on start_year, end_year
+//    // if (endYear > this.numYears || startYear < 0) {
+//    //   // Handle exception
+//    //   String msg = "Error: index error in calculateLinearChangeRate";
+//    //   throw new Exception(msg);
+//    // }
+//    //FIXME: (yang) when will this happen?
+//    if (endYear == this.numYears) {
+//      endYear--;
+//    }
+//
+//    // Linear regression of B5 (Y) on years since disturbance (X)
+//    // TODO: Reimplement using LinearLeastSquares - for now using
+//    // Cheng's code for consistency
+//    //
+//    // TODO: Generalize this function for any index
+//    double[] x = new double[this.numYears];
+//    double[] y = new double[this.numYears];
+//    int numObs = endYear - startYear + 1;
+//    for (int i = startYear; i <= endYear; i++) {
+//      int j = i - startYear;
+//      y[j] = this.ud[B5][i];
+//      x[j] = this.yearTable[i] - this.yearTable[startYear];
+//    }
+//    return linearFit(y, x, numObs);
+//  }
 
   /**
    * Determine if a current year's pixel should be considered a minor
@@ -1596,35 +1640,32 @@ public class VCT {
   /**
    * Get a mean value over a slice of an array
    *
+   * //FIXME: (yang) replace with common math, consider delete this
+   *
    * @param arr   - Array to calculate mean
    * @param start - start index of array
    * @param end   - end index of array (not included!)
    * @return - mean value of slice
    */
-  private double getSliceMean(double[] arr, int start, int end) {
-    double sum = 0.0;
-    for (int i = start; i < end; i++) {
-      sum += arr[i];
-    }
-    return ((double) sum / (end - start));
-  }
+//  private double getSliceMean(double[] arr, int start, int end) {
+//    Mean m = new Mean();
+//    return m.evaluate(arr, start, end-start);
+//  }
 
   /**
    * Get a standard deviation value over a slice of an array
+   *
+   * //FIXME: (yang) replace with common math, consider delete this
    *
    * @param arr   - Array to calculate standard deviation
    * @param start - start index of array
    * @param end   - end index of array (not included!)
    * @return - standard deviation value of slice
    */
-  private double getSliceStd(double[] arr, int start, int end) {
-    double var = 0.0;
-    double mean = getSliceMean(arr, start, end);
-    for (int i = start; i < end; i++) {
-      var += (arr[i] - mean) * (arr[i] - mean);
-    }
-    return Math.sqrt((double) var / (end - start));
-  }
+//  private double getSliceStd(double[] arr, int start, int end) {
+//    StandardDeviation sd = new StandardDeviation();
+//    return sd.evaluate(arr, start, end-start);
+//  }
 
   /**
    * Least-squares linear fit of Y on X
@@ -1634,41 +1675,42 @@ public class VCT {
    * @param numObs - length of array
    * @return - slope, intercept, r2 and t value of least-squares linear regr.
    */
-  private double[] linearFit(double[] y, double[] x, int numObs) {
-    // TODO: Probably should be replaced with generic linear fitting algorithm
-    // but kept in here for comparison purposes
-
-    double sxx = 0.0;
-    double sxy = 0.0;
-    double syy = 0.0;
-
-    double meanX = getSliceMean(x, 0, numObs);
-    double meanY = getSliceMean(y, 0, numObs);
-    for (int i = 0; i < numObs; i++) {
-      sxx += (x[i] - meanX) * (x[i] - meanX);
-      syy += (y[i] - meanY) * (y[i] - meanY);
-      sxy += (y[i] - meanY) * (x[i] - meanX);
-    }
-
-    if (sxx < 0.00001) {
-      // Handle exception
-      // String msg = "Error: divided by 0 in linear fit\n";
-      // throw new Exception(msg);
-    }
-
-    double slope = sxy / sxx;
-    double intercept = meanY - meanX * slope;
-    double r2;
-    if (syy < 0.00001) {
-      r2 = 0.0;
-    } else {
-      r2 = (sxy * sxy) / (sxx * syy);
-    }
-    double denom = r2 == 1.0 ? 0.00001 : 1.0 - r2;
-
-    // TODO: What is t?
-    double t = Math.sqrt(r2 * (numObs - 2) / denom);
-
-    return new double[]{slope, intercept, r2, t};
-  }
+//  private double[] linearFit(double[] y, double[] x, int numObs) {
+//    // TODO: Probably should be replaced with generic linear fitting algorithm
+//    // but kept in here for comparison purposes
+//
+//    double sxx = 0.0;
+//    double sxy = 0.0;
+//    double syy = 0.0;
+//
+//    Mean m = new Mean();
+//    double meanX = m.evaluate(x, 0, numObs);
+//    double meanY = m.evaluate(y, 0, numObs);
+//    for (int i = 0; i < numObs; i++) {
+//      sxx += (x[i] - meanX) * (x[i] - meanX);
+//      syy += (y[i] - meanY) * (y[i] - meanY);
+//      sxy += (y[i] - meanY) * (x[i] - meanX);
+//    }
+//
+//    if (sxx < 0.00001) {
+//      // Handle exception
+//      // String msg = "Error: divided by 0 in linear fit\n";
+//      // throw new Exception(msg);
+//    }
+//
+//    double slope = sxy / sxx;
+//    double intercept = meanY - meanX * slope;
+//    double r2;
+//    if (syy < 0.00001) {
+//      r2 = 0.0;
+//    } else {
+//      r2 = (sxy * sxy) / (sxx * syy);
+//    }
+//    double denom = r2 == 1.0 ? 0.00001 : 1.0 - r2;
+//
+//    // TODO: What is t?
+//    double t = Math.sqrt(r2 * (numObs - 2) / denom);
+//
+//    return new double[]{slope, intercept, r2, t};
+//  }
 }
