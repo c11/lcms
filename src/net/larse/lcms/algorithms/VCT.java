@@ -518,10 +518,8 @@ public class VCT {
    * @param fill index of fill value
    */
   private void fillValues(int start, int end, int fill) {
-    for (int j = start; j < end; j++) {
-      for (int k = 0; k < N_BANDS; k++) {
-        this.ud[k][j] = this.ud[k][fill];
-      }
+    for (int k = 0; k < N_BANDS; k++) {
+      Arrays.fill(this.ud[k], 0, end-start, this.ud[k][fill]);
     }
   }
 
@@ -658,15 +656,9 @@ public class VCT {
         j += 1;
         numCstObs += 1;
       }
-      if (numCstObs >= 2) {
-        for (int k = i; k < j; k++) {
-          this.cstSeg[k] = CLUD;
-        }
-      } else {
-        for (int k = i; k < j; k++) {
-          this.cstSeg[k] = NCLUD;
-        }
-      }
+
+      Arrays.fill(this.cstSeg, i, j, numCstObs < 2 ? NCLUD : CLUD);
+
       if (numCstObs > 0) {
 //        ludSeg += 1;
         sharpTurns += 1;
@@ -679,15 +671,8 @@ public class VCT {
         j += 1;
         numCstObs += 1;
       }
-      if (numCstObs >= 2) {
-        for (int k = i; k < j; k++) {
-          this.cstSeg[k] = CHUD;
-        }
-      } else {
-        for (int k = i; k < j; k++) {
-          this.cstSeg[k] = NCHUD;
-        }
-      }
+      Arrays.fill(this.cstSeg, i, j, numCstObs < 2 ? NCHUD : CHUD);
+
       if (numCstObs > 0) {
 //          this.hudSeg += 1;
         sharpTurns += 1;
@@ -716,17 +701,15 @@ public class VCT {
 
       // Initialize this segment
       int j = i;
-      int segLength = 1;
 
       // As long as the label for this year matches the following year's
       // label, keep growing the segment
       while (j < this.numYears - 1 && this.cstSegSmooth[j] == this.cstSegSmooth[j + 1]) {
         j++;
-        segLength += 1;
       }
 
       // Store this segment
-      tsSeg.add(new TSSegment(this.cstSegSmooth[i], i, segLength));
+      tsSeg.add(new TSSegment(this.cstSegSmooth[i], i, j-i+1));
 
       // Increment for the next segment
       i = j + 1;
