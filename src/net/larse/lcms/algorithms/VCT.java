@@ -880,6 +880,7 @@ public class VCT {
     }
 
     if (this.lcType == PART_FOREST) {
+      //FIXME: (yang) why numDist == 0 is a problem?
       if (this.numDist < 1 || this.numDist >= this.numYears) {
         // Handle exception
         // String msg = "Error: Wrong number of disturbances";
