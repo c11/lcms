@@ -42,6 +42,8 @@ import java.util.List;
  *  May 24, 2015, Z. Yang
  * 5. replace mean, standard deviation, and linearFit
  *
+ * 6. VCTOutput: it does not seem necessary to return lcType and nYears
+ *
  */
 public class VCT {
 
@@ -51,7 +53,7 @@ public class VCT {
   // Maximum number of years that arrays can store
   // TODO: Can we do something like:
   // private static final int MAX_YEARS = DateTime.now().getYear() - 1984;
-  private static final int MAX_YEARS = 30;
+  private static int MAX_YEARS = 30;
 
   // Quality assurance (per pixel-year) constants
   private static final int QA_BAD = 0;
@@ -226,16 +228,52 @@ public class VCT {
   public VCT() {
     this.maxUd = 4.0;
     this.minNdvi = 0.45;
-//      allocateArrays();
+    allocateArrays();
   }
 
-  public VCT(double maxUd, double minNdvi) {
+  public VCT(double maxUd, double minNdvi, int nYears) {
     this.maxUd = maxUd;
     this.minNdvi = minNdvi;
-
-    //TODO: (YANG) this seems not necessary, find ways to replace this
-//      allocateArrays();
+    this.MAX_YEARS = nYears;
+    allocateArrays();
   }
+
+  /**
+   * Allocate space for all arrays so we can reuse these containers for all
+   * pixels. This is predicated on setting a maximum number of possible years
+   * that we will hold for any pixel. Each pixel's input arrays will actually
+   * determine how much of these arrays get used.
+   */
+  private void allocateArrays() {
+    // Integer MAX_YEARS arrays
+    this.mask = new int[MAX_YEARS];
+    this.yearTable = new int[MAX_YEARS];
+    this.qFlag = new int[MAX_YEARS];
+    this.cstSeg = new int[MAX_YEARS];
+    this.cstSegSmooth = new int[MAX_YEARS];
+    this.distFlag = new int[MAX_YEARS];
+    this.distYear = new int[MAX_YEARS];
+    this.distLength = new int[MAX_YEARS];
+    this.regrFlag = new int[MAX_YEARS];
+
+    // Double MAX_YEARS arrays
+    this.distR2 = new double[MAX_YEARS];
+    this.distMagn = new double[MAX_YEARS];
+    this.distMagnB4 = new double[MAX_YEARS];
+    this.distMagnVi = new double[MAX_YEARS];
+    this.distMagnBr = new double[MAX_YEARS];
+    this.regrR2 = new double[MAX_YEARS];
+    this.regrSlope = new double[MAX_YEARS];
+    this.regrRough = new double[MAX_YEARS];
+
+    // Double N_BANDS arrays
+    this.meanForUdBx = new double[N_BANDS];
+    this.sdForUdBx = new double[N_BANDS];
+
+    // Double N_BANDS x MAX_YEARS arrays
+    // this.ud = new double[N_BANDS][MAX_YEARS];
+  }
+
 
   /**
    * This is the main function for determining change analysis within VCT.
@@ -361,25 +399,25 @@ public class VCT {
 
     //TODO: (yang) initialize variables, check for necessity!!
     //which one can be local, not as class variables?
-    this.qFlag = new int[this.numYears];
-    this.cstSeg = new int[this.numYears];
-    this.cstSegSmooth = new int[this.numYears];
-    this.distFlag = new int[this.numYears];
-    this.distYear = new int[this.numYears];
-    this.distLength = new int[this.numYears];
-    this.regrFlag = new int[this.numYears];
+    Arrays.fill(this.qFlag, 0);
+    Arrays.fill(this.cstSeg, 0);
+    Arrays.fill(this.cstSegSmooth, 0);
+    Arrays.fill(this.distFlag, 0);
+    Arrays.fill(this.distYear, 0);
+    Arrays.fill(this.distLength, 0);
+    Arrays.fill(this.regrFlag, 0);
 
-    this.distR2 = new double[this.numYears];
-    this.distMagn = new double[this.numYears];
-    this.distMagnB4 = new double[this.numYears];
-    this.distMagnVi = new double[this.numYears];
-    this.distMagnBr = new double[this.numYears];
-    this.regrR2 = new double[this.numYears];
-    this.regrSlope = new double[this.numYears];
-    this.regrRough = new double[this.numYears];
+    Arrays.fill(this.distR2, 0);
+    Arrays.fill(this.distMagn, 0);
+    Arrays.fill(this.distMagnB4, 0);
+    Arrays.fill(this.distMagnVi, 0);
+    Arrays.fill(this.distMagnBr, 0);
+    Arrays.fill(this.regrR2, 0);
+    Arrays.fill(this.regrSlope, 0);
+    Arrays.fill(this.regrRough, 0);
 
-    this.meanForUdBx = new double[this.N_BANDS];
-    this.sdForUdBx = new double[this.N_BANDS];
+    Arrays.fill(this.meanForUdBx, 0);
+    Arrays.fill(this.sdForUdBx, 0);
   }
 
   /**
