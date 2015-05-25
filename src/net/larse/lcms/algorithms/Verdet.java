@@ -21,6 +21,21 @@ import java.util.Arrays;
  *
  */
 
+/*
+ * implementation details:
+ *  need to convert two files: find_disturbance.m
+ *
+ * it's 'fit_piecewise_linear.m' and 'tv_1d_many.m'.
+ * The 'fit_piecewise_linear' is called from 'find_disturbances.m' on line 97.
+ * There is a bit of code on either side of that call that is in my port as well.
+ * My port is at X:\matt\ensemble_python\ensemble\verdet with most of the relevant code in 'verdet.py'.
+ *
+ * May 24, 2015, Z. Yang
+ * remove unused variables
+ *
+ */
+
+
 public final class Verdet {
   static class Args extends AlgorithmBase.ArgsBase {
     @Doc(help = "convergence tolerance")
@@ -48,9 +63,8 @@ public final class Verdet {
   }
 
   /**
-   * The main change method for verdet.
    *
-   * @param a, filtered smoothed spectral array one value per year
+   * @param a, scores calculated in verdet
    * @return
    */
   public double[] getResult(double[] a) {
@@ -69,13 +83,11 @@ public final class Verdet {
     return score;
   }
 
-  private double[] fitPiecewiseLinear(double[] B) {
+  public double[] fitPiecewiseLinear(double[] B) {
     double[] G = tv1DMany(B);
 
     //TODO: should this be a parameter?
     double dx = 0.005;
-
-    double[] Y = B.clone();
 
     //Orignal Matlab code use loop to iterate the multi-dimensional G
     //TODO: check to see if the multi-dimensional data are necessary
@@ -89,7 +101,7 @@ public final class Verdet {
 
     double[] T1 = new double[B.length];
 
-    double[] YY = Y.clone();
+//    double[] YY = B.clone();
 
     while (!Arrays.equals(T1, T)) {
       T1 = T.clone();
@@ -138,6 +150,18 @@ public final class Verdet {
         g[i] = 1.0* (N[i] - f.get(cc[i])) / (f.get(cc[i]+1) - f.get(cc[i]));
       }
 
+//      int aSize = B.length * (cc[cc.length-1] + 1);
+//      double[] A = new double[aSize];
+//
+//      for (int i = 0; i < B.length; i++) {
+//        A[cc[i] * B.length + N[i]] = 1 - g[i];
+//
+//        if (i < B.length-1) {
+//          A[(cc[i]+1) * B.length + N[i]] = g[i];
+//        }
+//      }
+
+      //int aSize = B.length * (cc[cc.length-1] + 1);
       int nA = cc[cc.length-1] + 1;
       double[][] A = new double[B.length][nA];
 
@@ -152,9 +176,10 @@ public final class Verdet {
         }
       }
 
+//      SimpleMatrix matrixA = new SimpleMatrix(B.length, 2, false, A);
       OLSMultipleLinearRegression ols = new OLSMultipleLinearRegression();
       ols.setNoIntercept(true);
-      ols.newSampleData(YY, A);
+      ols.newSampleData(B, A);
       double[] b = ols.estimateRegressionParameters();
 
       SimpleMatrix st = new SimpleMatrix(A).mult(new SimpleMatrix(2, 1, true, b));
@@ -175,7 +200,7 @@ public final class Verdet {
    *
    * @param X
    */
-  private double[] tv1DMany(double[] X) {
+  public double[] tv1DMany(double[] X) {
 
     SimpleMatrix A = new SimpleMatrix(X.length, X.length);
     for (int i = 0; i < X.length; i++) {
@@ -185,7 +210,6 @@ public final class Verdet {
     }
 
     SimpleMatrix AtA = A.transpose().mult(A);
-
     double[] O = new double[X.length];
 
     //Orignal Matlab code use loop to iterate the multi-diemsional X
