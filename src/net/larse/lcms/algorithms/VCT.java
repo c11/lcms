@@ -17,29 +17,33 @@ import java.util.List;
  * automated approach for reconstructing recent forest disturbance history using
  * dense Landsat time series stacks. Remote Sensing of Environment, 114(1),
  * 183-198
- * <p/>
+ *
  * This code was ported and adapted from Chengquan Huang's C code changeAnalysis
  * at version 3.5. It implements the "disturbRegrowth" function, but does not
  * include "removeFalseDisturbance".
  *
  * @author Matt Gregory
  *
- *
  * May 22, 2015, Z. Yang
- * Refactory some of the implemented VCT logic.
+ * Refactor some of the implemented VCT logic.
  *
- * 1. Number of years used in the analysis would not be fixed, it would be better to keep it as a parameter.
+ * 1. Number of years used in the analysis would not be fixed, it would be
+ *    better to keep it as a parameter.
  *
- * 2. Currently input data is passed in as List<List<Double>>, changing it to double[][]
- *    in the order of B3, B4, B5, B7, B7, NDVI, DNBR, COMP, it will be more efficient to construct this
- *    when using pixelFunctor to read the value.
+ * 2. Currently input data is passed in as List<List<Double>>, changing it
+ *    to double[][] in the order of B3, B4, B5, B7, B7, NDVI, DNBR, COMP, it
+ *    will be more efficient to construct this when using pixelFunctor to read
+ *    the value.
  *
  * 3. Check logic when percent good is less than 50%!!!
  *
- *  May 23, 2015, Z. Yang
- * 4. removed inner static class VCTSolver. Together with that, changed static final method to private methods
+ * May 23, 2015, Z. Yang
+ * 
+ * 4. removed inner static class VCTSolver. Together with that, changed
+ *    static final method to private methods
  *
- *  May 24, 2015, Z. Yang
+ * May 24, 2015, Z. Yang
+ * 
  * 5. replace mean, standard deviation, and linearFit
  *
  * 6. VCTOutput: it does not seem necessary to return lcType and nYears
@@ -47,12 +51,8 @@ import java.util.List;
  */
 public class VCT {
 
-//  public final static class VCTSolver {
-
   // <editor-fold defaultstate="collapsed" desc=" CONSTANTS ">
   // Maximum number of years that arrays can store
-  // TODO: Can we do something like:
-  // private static final int MAX_YEARS = DateTime.now().getYear() - 1984;
   private static int MAX_YEARS = 30;
 
   // Quality assurance (per pixel-year) constants
@@ -71,34 +71,32 @@ public class VCT {
   private static final int COMP = 7;
   private static final int N_BANDS = 8;
 
-  private static final List<Integer> UD_INDEXES = Arrays.asList(B3, B5, B7);
-
   // Mask constants - all "fillable" categories are <= 5
   // Even though not all categories are used, we list them for metadata
   // purposes.  Note that these ARE NOT the same categories as in VCT
   // source code.
 
-  //TODO: (yang) consider to change these to enum.
-//  public enum Mask{
-//    BACKGROUND(0),
-//    CLOUD(1),
-//    CLOUD_EDGE(2),
-//    SHADOW(3),
-//    SHADOW_EDGE(4),
-//    SNOW(5),
-//    WATER(6),
-//    CLEAR_LAND(7),
-//    CORE_FOREST(8),
-//    CORE_NONFOREST(9),
-//    CONFIDENT_CLEAR(10),
-//    FILL_CLASSES(5);
-//
-//    private final int value;
-//
-//    Mask(int value) {
-//      this.value = value;
-//    }
-//  }
+  // TODO: (yang) consider to change these to enum.
+  // public enum Mask{
+  //   BACKGROUND(0),
+  //   CLOUD(1),
+  //   CLOUD_EDGE(2),
+  //   SHADOW(3),
+  //   SHADOW_EDGE(4),
+  //   SNOW(5),
+  //   WATER(6),
+  //   CLEAR_LAND(7),
+  //   CORE_FOREST(8),
+  //   CORE_NONFOREST(9),
+  //   CONFIDENT_CLEAR(10),
+  //   FILL_CLASSES(5);
+  //
+  //   private final int value;
+  //
+  //   Mask(int value) {
+  //     this.value = value;
+  //   }
+  // }
 
   private static final int BACKGROUND = 0;
   private static final int CLOUD = 1;
@@ -128,10 +126,6 @@ public class VCT {
   private static final int REGROWTH_OCCURRED = 2;
   private static final int REGROWTH_TO_FOREST = 3;
 
-  // Forest threshold maximum
-  //TODO: (yang) consider changing this to a parameter as it would be different for different system.
-  private static final double FOR_THR_MAX = 3.0;
-
   // Constants that signify consecutive and non-consecutive high and low UD
   private static final int CHUD = 1;
   private static final int CLUD = 2;
@@ -146,6 +140,7 @@ public class VCT {
   // Input variables
   private final double maxUd;    // Maximum UD composite value for forest
   private final double minNdvi;  // Minimum NDVI value for forest
+  private final double forThrMax; // Maximum threshold for forest
   private double[][] ud;         // Z-scores for all bands and indices, [NYears][B3(0), B4(1), B5(2), B7(3), BT(4), NDVI(5), DNBR(6), COMP(7)]
   private int[] mask;            // Mask (categorical) values for all years
   private int[] yearTable;       // Array to hold all years for this series
@@ -153,27 +148,7 @@ public class VCT {
 
   // Characterization of input variables
   private int[] qFlag;           // QA flag for each year in the series
-
-  //FIXME: (yang) only referenced in interpolationAndIndices(), change to local
-//    private int pctGoodObs;        // Percent of good QA flags
-
-  //FIXME: (yang) used in interpolationAndIndices() and setDisturbanceVariables(), does not seem needed this variable.
-  //Evaulate more
-//  private double uRange;         // Range of ud composite values
-
-  //FIXME: (yang) variable initialized, but is never used, consider remove it!!
-//    private double vRange;         // Range of ud NDVI values
-
-  //FIXME: (yang) only used in interpolationAndIndices(), does not seem needed,
-//    private double fiRough;        // Roughness of forest index from composite
-
   private double fiRange;        // Range of forest index (= uRange)
-
-  //FIXME: (yang) only used in analyzeUDist(), change to local
-//    private double globalUdR2;     // R2 of entire series in ud B5
-
-  //FIXME: (yang) used in analyzeUDist() to set its value, but does not seem to be used in any real logic, consider remove!!
-//    private double globalUdSlp;    // Slope of entire series in ud B5
 
   // Attributes associated with maximum forest length segment - used
   // in thresholding
@@ -185,25 +160,8 @@ public class VCT {
   private int[] cstSeg;          // Segment characterization
   private int[] cstSegSmooth;    // Smoothed characterization
 
-  //FIXME: (yang) this variable is only referenced in analyzeUDist() and was not used for anything, consider remove!!
-//    private int hudSeg;            // Number of high ud segments
-
-
-  //FIXME: (yang) this seem is only used in analyzeUDist() and should be a local variable.
-  //private int ludSeg;            // Number of low ud segments
-  //private int sharpTurns;        // Number of sharp turns between segments
-
   // Disturbance variables
   private int numDist;           // Number of disturbances detected
-
-  //FIXME: (yang) only used in analyzeUDist() and not referenced in change detection, consider remove!!
-//    private int numMajorDist;      // Number of major disturbances detected
-
-  //FIXME: (yang) this is only referenced in setDisturbanceVariables() and not used anywhere, consider remove it
-//    private int longestDistLength; // Length of the longest disturbance
-//    private double longestDistR2;  // R2 of the longest disturbance
-//    private double longestDistRough; // Roughness of the longest disturbance
-
   private int[] distFlag;        // Type of each disturbance
   private int[] distYear;        // Year of each disturbance
   private int[] distLength;      // Length of each disturbance
@@ -221,19 +179,19 @@ public class VCT {
 
   // Land cover/change types
   private int lcType;            // Final land cover/change type
-  //FIXME: (yang) only used in calculateAgIndicator(), change to local
-//    private int agIndicator;       // Agriculture indicator
   // </editor-fold>
 
   public VCT() {
     this.maxUd = 4.0;
     this.minNdvi = 0.45;
+    this.forThrMax = 3.0;
     allocateArrays();
   }
 
-  public VCT(double maxUd, double minNdvi, int nYears) {
+  public VCT(double maxUd, double minNdvi, double forThrMax, int nYears) {
     this.maxUd = maxUd;
     this.minNdvi = minNdvi;
+    this.forThrMax = forThrMax;
     this.MAX_YEARS = nYears;
     allocateArrays();
   }
@@ -271,9 +229,8 @@ public class VCT {
     this.sdForUdBx = new double[N_BANDS];
 
     // Double N_BANDS x MAX_YEARS arrays
-    // this.ud = new double[N_BANDS][MAX_YEARS];
+    this.ud = new double[N_BANDS][MAX_YEARS];
   }
-
 
   /**
    * This is the main function for determining change analysis within VCT.
@@ -282,30 +239,30 @@ public class VCT {
    * code) and a mask image denoting land cover type and/or image artifacts
    * (e.g. cloud, shadow). The algorithm consists of two main functions and a
    * cleanup function:
-   * <p/>
+   *
    * 1) interpolationAndIndices - The ud series for all indices is first
    * filled in for all cloud/shadow pixels from neighboring years.
-   * <p/>
+   *
    * 2) analyzeUDist - The filled series are analyzed to find anomalous
    * deviations from neighboring years and characterized into disturbance and
    * regrowth segments
-   * <p/>
+   *
    * 3) setDisturbanceVariables - Various cleanup and clamping of variable
    * values as well as determining disturbance duration.
-   * <p/>
+   *
    * Note that much of the code relies of comparing series values with known
    * or derived thresholds of "forestness" and anomalies are detected when
    * these threshold bounds are exceeded.
    *
    * @param ud    - List of all UD values across all pertinent bands and indices
-   *              (B3, B4, B5, B7, thermal, NDVI, DNBR, R45). There is one List per index
-   *              which contains values for all years.
+   *                (B3, B4, B5, B7, thermal, NDVI, DNBR, R45). There is
+   *                one List per index which contains values for all years.
    * @param mask  - List of mask values for this pixel across all years
    * @param years - List of years corresponding to the indices in ud and mask
-   * @return - Unspecified for now
+   * @return - VCTOutput instance (currently returning distFlag and four
+   *           disturbance magnitudes
    */
-  public VCTOutput getResult(double[][] ud,
-                             int[] mask, int[] years) {
+  public VCTOutput getResult(double[][] ud, int[] mask, int[] years) {
 
     //initialize instance variable for this pixel
     this.ud = ud;
@@ -345,79 +302,36 @@ public class VCT {
    * Initialize the pixel's values from the passed arguments and calculate the
    * composite UD score as a function of bands 3, 5, and 7
    *
-   * //TODO: (yang) move the composite UD calcuation to VCT initialization call
    */
   private void initializePixel() {
     // Initialize all variables
     this.numDist = 0;
     this.lcType = 0;
     this.maxConsFor = 0;
-
-    // Initialize arrays from input lists
-    //
-    // TODO: need better way to do this -- too fragile
-    // This assumes that the input data is stored by bands and then years
-    // with the following bands (or indexes): B3, B4, B5, B7, BT (thermal),
-    // NDVI, DNBR.
-//    for (int i = 0; i < this.numYears; i++) {
-//      for (int j = 0; j < N_BANDS - 1; j++) {
-//        this.ud[j][i] = ud.get(j).get(i);
-//      }
-//      this.mask[i] = mask.get(i);
-//      this.yearTable[i] = years.get(i);
-//    }
-//
-//    // Calculate the composite UD variable
-//    for (int i = 0; i < this.numYears; i++) {
-//      double sumSq = 0.0;
-//      for (Integer index : UD_INDEXES) {
-//        double tmp = this.ud[index][i];
-//        tmp = tmp >= 0.0 ? tmp : tmp / 2.5;
-//        sumSq += tmp * tmp;
-//      }
-//      this.ud[COMP][i] = Math.sqrt(sumSq / UD_INDEXES.size());
-//    }
-
-//      this.pctGoodObs = 0;
-//      this.longestDistLength = 0;
-//      this.longestDistR2 = 0.0;
-//      this.longestDistRough = 0.0;
-//      this.globalUdR2 = 0.0;
-//      this.globalUdSlp = 0.0;
-
-//      this.numMajorDist = 0;
-//    this.uRange = 0.0;
-//      this.vRange = 0.0;
-//      this.fiRough = 0.0;
-
-    //FIXME: (yang) do we need both uRange and fiRange, they seem to be the same in the code.
     this.fiRange = 0.0;
-//      this.hudSeg = 0;
-//      this.ludSeg = 0;
-//      this.agIndicator = 0;
-//      this.sharpTurns = 0;
 
-    //TODO: (yang) initialize variables, check for necessity!!
-    //which one can be local, not as class variables?
-    Arrays.fill(this.qFlag, 0);
-    Arrays.fill(this.cstSeg, 0);
-    Arrays.fill(this.cstSegSmooth, 0);
-    Arrays.fill(this.distFlag, 0);
-    Arrays.fill(this.distYear, 0);
-    Arrays.fill(this.distLength, 0);
-    Arrays.fill(this.regrFlag, 0);
+    // TODO: Keeping this as a range fill for now to be explicit that we
+    // would only want to fill up to this.numYears even if we decide to
+    // increase MAX_YEARS.  Overrule this if you want.
+    Arrays.fill(this.qFlag, 0, this.numYears, 0);
+    Arrays.fill(this.cstSeg, 0, this.numYears, 0);
+    Arrays.fill(this.cstSegSmooth, 0, this.numYears, 0);
+    Arrays.fill(this.distFlag, 0, this.numYears, 0);
+    Arrays.fill(this.distYear, 0, this.numYears, 0);
+    Arrays.fill(this.distLength, 0, this.numYears, 0);
+    Arrays.fill(this.regrFlag, 0, this.numYears, 0);
 
-    Arrays.fill(this.distR2, 0);
-    Arrays.fill(this.distMagn, 0);
-    Arrays.fill(this.distMagnB4, 0);
-    Arrays.fill(this.distMagnVi, 0);
-    Arrays.fill(this.distMagnBr, 0);
-    Arrays.fill(this.regrR2, 0);
-    Arrays.fill(this.regrSlope, 0);
-    Arrays.fill(this.regrRough, 0);
+    Arrays.fill(this.distR2, 0, this.numYears, 0.0);
+    Arrays.fill(this.distMagn, 0, this.numYears, 0.0);
+    Arrays.fill(this.distMagnB4, 0, this.numYears, 0.0);
+    Arrays.fill(this.distMagnVi, 0, this.numYears, 0.0);
+    Arrays.fill(this.distMagnBr, 0, this.numYears, 0.0);
+    Arrays.fill(this.regrR2, 0, this.numYears, 0.0);
+    Arrays.fill(this.regrSlope, 0, this.numYears, 0.0);
+    Arrays.fill(this.regrRough, 0, this.numYears, 0.0);
 
-    Arrays.fill(this.meanForUdBx, 0);
-    Arrays.fill(this.sdForUdBx, 0);
+    Arrays.fill(this.meanForUdBx, 0, N_BANDS, 0.0);
+    Arrays.fill(this.sdForUdBx, 0, N_BANDS, 0.0);
   }
 
   /**
@@ -426,70 +340,49 @@ public class VCT {
    * QA_GOOD values. Implements section 3.3.1 in Huang et al. (2010) paper
    */
   private void interpolationAndIndices() {
-    //YANG: changed from instance variable to local variable
-    int pctGoodObs = 0;
     int badCount = 0;
+    
     // Flag each year's pixel as good or bad based on the mask value
     // TODO: Note that class 0 (BACKGROUND) is *not* being flagged as
     // "fillable" in the original source code (ie. SLC-off errors).
     // We need to ask Cheng about this
-
-    //YANG: refactory of the code logic to speed computation.
-    int tmp = this.mask[0];
-    if (tmp != 0 && tmp <= FILL_CLASSES) {
-      this.qFlag[0] = QA_BAD;
-      badCount++;
-    } else {
-      this.qFlag[0] = QA_GOOD;
-    }
-
-    tmp = this.mask[this.numYears - 1];
-    if (tmp != 0 && tmp <= FILL_CLASSES) {
-      this.qFlag[this.numYears - 1] = QA_BAD;
-      badCount++;
-    } else {
-      this.qFlag[this.numYears - 1] = QA_GOOD;
-    }
-
-    // Look for spikes and dips that may be unflagged cloud and shadow and
-    // set the QA flag accordingly
-    for (int i = 1; i < this.numYears - 1; i++) {
-      if (this.mask[i] != 0 && this.mask[i] <= FILL_CLASSES) {
+    //
+    // Also, look for spikes and dips that may be unflagged cloud and
+    // shadow and set the QA flag accordingly
+    for (int i = 0; i < this.numYears; i++) {
+      
+      // Start by calling the value good
+      this.qFlag[i] = QA_GOOD;
+      
+      // Check for bad mask value
+      if (mask[i] != 0 && mask[i] <= FILL_CLASSES) {
         this.qFlag[i] = QA_BAD;
         badCount++;
-
-        // Skip over pixels already labeled as QA_BAD
         continue;
-      } else {
-        this.qFlag[i] = QA_GOOD;
       }
-
-      // Pixels higher in UD than neighboring years - cloud
-      // Pixels lower than UD than neighboring years - shadow
-      if (isRelativeCloud(i) || isRelativeShadow(i)) {
+      
+      // Check for cloud/shadow
+      if (i == 0) {
+        if (isBadEndpoint(i, i + 1)) {
+          this.qFlag[i] = QA_BAD;
+          badCount++;
+        }
+      } else if (i == this.numYears - 1) {
+        if (isBadEndpoint(i, i - 1)) {
+          this.qFlag[i] = QA_BAD;
+          badCount++;
+        }
+      } else if (isRelativeCloud(i) || isRelativeShadow(i)) {
         this.qFlag[i] = QA_BAD;
         badCount++;
       }
     }
-
-    // Now test the start/end conditions
-    int n = this.numYears;
-    if (this.qFlag[0] == QA_GOOD && isBadEndpoint(0, 1)) {
-      this.qFlag[0] = QA_BAD;
-      badCount++;
-    }
-    if (this.qFlag[n - 1] == QA_GOOD && isBadEndpoint(n - 1, n - 2)) {
-      this.qFlag[n - 1] = QA_BAD;
-      badCount++;
-    }
-
-    // Calculate bad percentage
-    pctGoodObs = (int) (100.0 - ((100.0 * badCount) / this.numYears));
 
     // Interpolate for bad observations indicated by qFlag
-    //TODO: (yang) is there any special treatment when percentGood is less than 50%?
+    // TODO: (yang) is there any special treatment when percentGood is less
+    // than 50%?
     int i = 0;
-    if (pctGoodObs > 50.0) {
+    if (badCount <= (this.numYears / 2.0)) {
       while (i < this.numYears) {
         // Skip good observations
         if (this.qFlag[i] == QA_GOOD) {
@@ -516,14 +409,18 @@ public class VCT {
           // No acceptable previous QA_GOOD - use next index to fill
           // all years from 0 to next
           else if (prev < 0) {
-            fillValues(0, next, next);
-            i = next + 1;
+            for (int k = 0; k < N_BANDS; k++) {
+              Arrays.fill(this.ud[k], 0, next, this.ud[k][next]);
+              // fillValues(0, next, next);
+            }
           }
           // No acceptable next QA_GOOD - use prev index to fill
           // all years from prev + 1 to num_years
           else if (next >= this.numYears) {
-            fillValues(prev+1, this.numYears, prev);
-            i = next + 1;
+            for (int k = 0; k < N_BANDS; k++) {
+              Arrays.fill(this.ud[k], prev + 1, this.numYears, this.ud[k][prev]);
+              // fillValues(prev+1, this.numYears, prev);
+            }
           }
           // Found years acceptable for interpolation - fill between
           // prev and next
@@ -531,58 +428,42 @@ public class VCT {
             for (int k = 0; k < N_BANDS; k++) {
               interpolateValues(this.ud[k], prev, next);
             }
-            i = next + 1;
           }
+          i = next + 1;
         }
       }
     }
 
     // Get range values for the composite UD and NDVI
     this.fiRange = Doubles.max(this.ud[COMP]) - Doubles.min(this.ud[COMP]);
-//      this.vRange = Doubles.max(this.ud[NDVI]) - Doubles.min(this.ud[NDVI]);
-
-//    this.fiRange = this.uRange;
-//      this.fiRough = fiRoughness(this.ud[COMP], 0, this.numYears);
-
-    // TODO: This is a restriction to ensure that when scaled by 10.0, it
-    // doesn't exceed byte length - unneeded?
-//      this.fiRough = Math.min(this.fiRough, 25.4);
   }
 
-  /**
-   * A internal help method, not a good design
-   * @param start start index to fill
-   * @param end end index to fill
-   * @param fill index of fill value
-   */
-  private void fillValues(int start, int end, int fill) {
-    for (int k = 0; k < N_BANDS; k++) {
-      Arrays.fill(this.ud[k], 0, end-start, this.ud[k][fill]);
-    }
-  }
-
+//  /**
+//   * A internal help method, not a good design
+//   * @param start start index to fill
+//   * @param end end index to fill
+//   * @param fill index of fill value
+//   */
+//  private void fillValues(int start, int end, int fill) {
+//    for (int k = 0; k < N_BANDS; k++) {
+//      Arrays.fill(this.ud[k], 0, end-start, this.ud[k][fill]);
+//    }
+//  }
 
   /**
    * Main function for determining disturbance and regrowth for this pixel's
    * trajectory. Main steps include:
-   * <p/>
+   *
    * 1) Determine composite and NDVI thresholds
    * 2) Find the longest consecutive forest streak
-   * 3) Find consecutive segments as either high or low UD values based on thresholds
+   * 3) Find consecutive segments as either high or low UD values based
+   *    on thresholds
    * 4) Smooth these segments
    * 5) Characterize segments as disturbance/regrowth classes
    * 6) Determine land cover/change type based on pattern of disturbances
    */
   private void analyzeUDist() {
-    //YANG: changed from class varialbe to local
-    int sharpTurns = 0;
-
-    //FIXME: (yang) not used variables, consider remove it!!
-//    int ludSeg = 0;
-//    double globalUdR2 = 0.0;
-
     // Assign some default information to this pixel
-    //TODO: (yang) why set distYear as the number of years?
     this.distYear[0] = this.distYear[1] = this.numYears;
     this.lcType = PART_FOREST;
 
@@ -606,29 +487,13 @@ public class VCT {
     //     min2Ud = this.ud[COMP];
     //   }
     // }
-    //
-//    double maxVi = Doubles.max(this.ud[NDVI]);
-//    double minUd = 9999.0;
-//    double min2Ud = 9999.0;
-//
-//    for (int i = 0; i < this.numYears; i++) {
-//      double cmp = this.ud[COMP][i];
-//      if (cmp < minUd) {
-//        minUd = cmp;
-//      }
-//      if (cmp > minUd && cmp < min2Ud) {
-//        min2Ud = cmp;
-//      }
-//    }
-//    if (min2Ud - minUd < FOR_THR_MAX) {
-//      min2Ud = minUd;
-//    }
 
-    //Yang incorporate Matt's new logic and consolidate calculation
-    //keep track of bottom two ud composite values
-    double maxVi = Double.NEGATIVE_INFINITY; //Doubles.max(this.ud[NDVI]);
-    double minUd = Double.NEGATIVE_INFINITY; //Doubles.min(this.ud[COMP]);
-    double min2Ud = Double.POSITIVE_INFINITY; //Doubles.max(this.ud[COMP]);
+    // double maxVi = Double.NEGATIVE_INFINITY; //Doubles.max(this.ud[NDVI]);
+    // double minUd = Double.NEGATIVE_INFINITY; //Doubles.min(this.ud[COMP]);
+    // double min2Ud = Double.POSITIVE_INFINITY; //Doubles.max(this.ud[COMP]);
+    double maxVi = Doubles.max(this.ud[NDVI]);
+    double minUd = 9999.0;
+    double min2Ud = 9999.0;
 
     // Track the number of water and shadow pixels and identify if they
     // come in the first and last thirds of the time series
@@ -636,40 +501,37 @@ public class VCT {
     int isWaterTail = 0;
     int firstThird = this.numYears / 3;
     int lastThird = this.numYears - firstThird;
-    double percentWater = 0.0;
-    double percentShadow = 0.0;
+    int numWater = 0;
+    int numShadow = 0;
     for (int i = 0; i < this.numYears; i++) {
       double tmp = this.ud[COMP][i];
       minUd = tmp < minUd ? tmp : minUd;
       min2Ud = (tmp > minUd && tmp < min2Ud) ? tmp : min2Ud;
-
       maxVi = this.ud[NDVI][i] > maxVi ? this.ud[NDVI][i] : maxVi;
-
       if (this.mask[i] == WATER || this.mask[i] == SHADOW) {
-        percentWater += 1.0;
+        numWater++;
         if (this.mask[i] == SHADOW) {
-          percentShadow += 1.0;
+          numShadow++;
         }
         isWaterFront += i < firstThird ? 1 : 0;
         isWaterTail += i >= lastThird ? 1 : 0;
       }
     }
-    percentWater /= this.numYears;
-    percentShadow /= this.numYears;
+    double percentWater = 1.0 * numWater / this.numYears;
+    double percentShadow = 1.0 * numShadow / this.numYears;
 
-    if (min2Ud - minUd < FOR_THR_MAX) {
+    if (min2Ud - minUd < this.forThrMax) {
       min2Ud = minUd;
     }
-
 
     // Get the maximum streak of years with forest.  The length of the
     // streak gets set in the function (this.maxConsFor) along with
     // the mean and standard deviations of the longest streak in each
     // index.  The value returned is the starting year of the streak.
-    int maxForStart = getMaxForLength(min2Ud, min2Ud + FOR_THR_MAX);
+    int maxForStart = getMaxForLength(min2Ud, min2Ud + this.forThrMax);
 
     // Set a threshold for determining change in the UD composite signal
-    double changeHike = FOR_THR_MAX;
+    double changeHike = this.forThrMax;
     double adjCoeff = Math.min(this.meanForUdBx[COMP] / 5.0, 1.67);
     if (adjCoeff > 1.0) {
       changeHike *= adjCoeff;
@@ -685,6 +547,7 @@ public class VCT {
     // CLUD or CHUD. If it only stays for one year, it is called NCLUD
     // or NCHUD.
     int i = 0;
+    int sharpTurns = 0;
     while (i < this.numYears) {
 
       // Consecutive low ud - CLUD
@@ -694,11 +557,8 @@ public class VCT {
         j += 1;
         numCstObs += 1;
       }
-
       Arrays.fill(this.cstSeg, i, j, numCstObs < 2 ? NCLUD : CLUD);
-
       if (numCstObs > 0) {
-//        ludSeg += 1;
         sharpTurns += 1;
       }
 
@@ -710,23 +570,15 @@ public class VCT {
         numCstObs += 1;
       }
       Arrays.fill(this.cstSeg, i, j, numCstObs < 2 ? NCHUD : CHUD);
-
       if (numCstObs > 0) {
-//          this.hudSeg += 1;
         sharpTurns += 1;
       }
       i = j;
     }
 
-    // Calculate fast greenup indicator of nonforest
-    // TODO: Right now we are not doing anything with this information
-    // comment out until we need it
-    // calculateAgIndicator();
-
     // Remove NCLUD and NCHUD labels based on adjacent labels - this
     // effectively smooths the segment labels
     System.arraycopy(this.cstSeg, 0, this.cstSegSmooth, 0, this.cstSeg.length);
-
     smoothSegment(this.cstSegSmooth, this.numYears, NCLUD);
     smoothSegment(this.cstSegSmooth, this.numYears, NCHUD);
 
@@ -734,7 +586,7 @@ public class VCT {
     // information.  This block uses the smoothed segment information
     // to create the segments
     i = 0;
-    List<TSSegment> tsSeg = new ArrayList<TSSegment>();
+    List<TSSegment> tsSeg = new ArrayList<>();
     while (i < this.numYears) {
 
       // Initialize this segment
@@ -742,12 +594,13 @@ public class VCT {
 
       // As long as the label for this year matches the following year's
       // label, keep growing the segment
-      while (j < this.numYears - 1 && this.cstSegSmooth[j] == this.cstSegSmooth[j + 1]) {
+      while (j < this.numYears - 1 
+              && this.cstSegSmooth[j] == this.cstSegSmooth[j + 1]) {
         j++;
       }
 
       // Store this segment
-      tsSeg.add(new TSSegment(this.cstSegSmooth[i], i, j-i+1));
+      tsSeg.add(new TSSegment(this.cstSegSmooth[i], i, j - i + 1));
 
       // Increment for the next segment
       i = j + 1;
@@ -762,23 +615,20 @@ public class VCT {
 
         // Consecutive high UD - signifies disturbance event
         case CHUD:
-//            this.numMajorDist += 1;
 
           // Characterize the disturbance and following recovery
           setDisturbance(thisSeg.startYear, thisSeg.endYear);
-
+          
           // More convenient to set regrowth type here
-          // dist_num is decremented due to increment in set_disturbance
-          //FIXME: (yang) not good practice.
-          int distNum = this.numDist - 1;
-          this.regrFlag[distNum] = REGROWTH_NOT_OCCURRED;
+          int lastDist = this.numDist - 1;
+          this.regrFlag[lastDist] = REGROWTH_NOT_OCCURRED;
 
           // Not the last segment in this time series and is followed by
           // a forested segment
           if (i < tsSeg.size() - 1) {
             if (tsSeg.get(i + 1).segType == CLUD
                 || tsSeg.get(i + 1).segType == NCLUD) {
-              this.regrFlag[distNum] = REGROWTH_TO_FOREST;
+              this.regrFlag[lastDist] = REGROWTH_TO_FOREST;
             } else {
               //TODO: (yang) when this happens, what is the right behavior?
               // Handle exception
@@ -788,9 +638,9 @@ public class VCT {
           }
           // Last segment in this time series, but high R2 and
           // negative slope indicate that regrowth is occurring
-          else if (this.regrR2[distNum] > 0.7
-              && this.regrSlope[distNum] < -0.2) {
-            this.regrFlag[distNum] = REGROWTH_OCCURRED;
+          else if (this.regrR2[lastDist] > 0.7
+              && this.regrSlope[lastDist] < -0.2) {
+            this.regrFlag[lastDist] = REGROWTH_OCCURRED;
           }
           break;
 
@@ -827,26 +677,6 @@ public class VCT {
           break;
       }
     }
-
-    // Run global linear fits across the time series, but leave off
-    // portions of tails (three at both beginning and end) and
-    // capture the best fit
-//    double[] coeff;
-//    for (i = 0; i < 3; i++) {
-//      coeff = calculateLinearChangeRate(i, this.numYears - 1);
-//      if (coeff[2] > globalUdR2) {
-//        globalUdR2 = coeff[2];
-//          this.globalUdSlp = coeff[0];
-//      }
-//    }
-
-//    for (i = this.numYears - 3; i < numYears; i++) {
-//      coeff = calculateLinearChangeRate(0, i);
-//      if (coeff[2] > globalUdR2) {
-//        globalUdR2 = coeff[2];
-//          this.globalUdSlp = coeff[0];
-//      }
-//    }
 
     // Final classification - set lcType based on calculated data
     // TODO: If this.lcType is driving the assignment and all other outputs
@@ -907,10 +737,6 @@ public class VCT {
     // TODO: A lot of the code in here looks to be just clamping for
     // data type (unsigned byte).  Probably not necessary in GEE context
 
-//    if (this.uRange > 25.4) {
-//      this.uRange = 25.4;
-//    }
-
     for (int i = 0; i < this.numYears; i++) {
       if (this.distMagn[i] > 25.0) {
         this.distMagn[i] = 25.0;
@@ -918,25 +744,13 @@ public class VCT {
     }
 
     if (this.lcType == PART_FOREST) {
-      //FIXME: (yang) why numDist == 0 is a problem?
-      if (this.numDist < 1 || this.numDist >= this.numYears) {
-        // Handle exception
-        // String msg = "Error: Wrong number of disturbances";
-        // throw new Exception(msg);
-      }
-
       // Find the disturbance with longest duration
       int dLength = 0;
-      int longestDistIdx = 0;
       for (int i = 0; i < this.numDist; i++) {
         if (this.distLength[i] > dLength) {
-          longestDistIdx = i;
           dLength = this.distLength[i];
         }
       }
-//        this.longestDistR2 = this.distR2[longestDistIdx];
-//        this.longestDistRough = this.regrRough[longestDistIdx];
-//        this.longestDistLength = dLength;
 
       // Clamp pixel values
       int f = this.distYear[0];
@@ -951,8 +765,6 @@ public class VCT {
       this.distMagnBr[f] = Math.max(Math.min(this.distMagnBr[f], 1.0), -1.0);
       this.distMagnBr[l] = Math.max(Math.min(this.distMagnBr[l], 1.0), -1.0);
     }
-
-//      this.globalUdSlp = Math.max(Math.min(this.globalUdSlp, 1.0), -1.0);
   }
 
   /**
@@ -1029,35 +841,35 @@ public class VCT {
     int waterCount = 0;
     int maxLength = 0;
 
-
-    //TODO: (yang) verify this single for-loop to replace the double while loop,
-//    int currentWaterCount = 0;
-//    int currentLength = 0;
-//    for (int i = 0; i < this.numYears; i++) {
-//      double tmp = this.ud[COMP][i];
-//      if (tmp <= maxForUd && tmp >= minForUd) {
-//        currentLength++;
-//        if (this.mask[i] == WATER) {
-//          currentWaterCount++;
-//        }
-//      }
-//      else {
-//        if (maxLength < currentLength) {
-//          maxLength = currentLength;
-//          waterCount = currentWaterCount;
-//          iEnd = i - 1;
-//        }
-//        currentWaterCount = 0;
-//        currentLength = 0;
-//        iStart = i;
-//      }
-//    }
-//    //if the last segment is the longest
-//    if (maxLength < currentLength) {
-//      maxLength = currentLength;
-//      waterCount = currentWaterCount;
-//      iEnd = this.numYears - 1;
-//    }
+    // TODO: (yang) verify this single for-loop to replace the double
+    // while loop
+    // int currentWaterCount = 0;
+    // int currentLength = 0;
+    // for (int i = 0; i < this.numYears; i++) {
+    //   double tmp = this.ud[COMP][i];
+    //   if (tmp <= maxForUd && tmp >= minForUd) {
+    //     currentLength++;
+    //     if (this.mask[i] == WATER) {
+    //       currentWaterCount++;
+    //     }
+    //   }
+    //   else {
+    //     if (maxLength < currentLength) {
+    //       maxLength = currentLength;
+    //       waterCount = currentWaterCount;
+    //       iEnd = i - 1;
+    //     }
+    //     currentWaterCount = 0;
+    //     currentLength = 0;
+    //     iStart = i;
+    //   }
+    // }
+    // // if the last segment is the longest
+    // if (maxLength < currentLength) {
+    //   maxLength = currentLength;
+    //   waterCount = currentWaterCount;
+    //   iEnd = this.numYears - 1;
+    // }
 
     while (i < this.numYears) {
       // Reset counts
@@ -1085,31 +897,31 @@ public class VCT {
       }
 
       // Move the year pointer ahead
-      if (yearCount > 0) {
-        i += yearCount;
-      } else {
-        i++;
-      }
+      i += (yearCount > 0) ? yearCount : 1;
     }
 
     // Initialize the container to hold means and standard deviations of
     // the maximum forest streak
-    for (i = 0; i < N_BANDS; i++) {
-      this.meanForUdBx[i] = 25.4;
-      this.sdForUdBx[i] = 25.4;
-    }
+    Arrays.fill(this.meanForUdBx, 25.4);
+    Arrays.fill(this.sdForUdBx, 25.4);
 
     // If there is a forest streak, calculate statistics on this streak
+    // TODO: Mean and StandardDeviation are somehow giving very slightly
+    // different values than getSliceMean / getSliceStd to the point where
+    // pixels change lcType in further logic based on threshold values.
+    // What to do on this?
     if (maxLength > 0) {
-      Mean m = new Mean();
+      // Mean m = new Mean();
       for (int j = 0; j < N_BANDS; j++) {
-        this.meanForUdBx[j] = m.evaluate(this.ud[j], iStart, iEnd-iStart);
+        // this.meanForUdBx[j] = m.evaluate(this.ud[j], iStart, iEnd - iStart);
+        this.meanForUdBx[j] = getSliceMean(this.ud[j], iStart, iEnd);
       }
 
       if (maxLength > 1) {
-        StandardDeviation sd = new StandardDeviation();
+        // StandardDeviation sd = new StandardDeviation(false);
         for (int j = 0; j < N_BANDS; j++) {
-          this.sdForUdBx[j] = sd.evaluate(this.ud[j], iStart, iEnd - iStart);
+          // this.sdForUdBx[j] = sd.evaluate(this.ud[j], iStart, iEnd - iStart);
+          this.sdForUdBx[j] = getSliceStd(this.ud[j], iStart, iEnd);
         }
       } else {
         // Calculate standard deviations using a high SD value if
@@ -1121,71 +933,6 @@ public class VCT {
     }
     this.maxConsFor = maxLength - waterCount;
     return (iStart);
-  }
-
-  /**
-   * Determine whether or not a pixel is indicative of agriculture - high
-   * yearly variability in signal
-   */
-  private void calculateAgIndicator() {
-    //YANG: chanded from instance variable to local variable
-    int agIndicator = 0;
-
-
-    double suddenChange = 3.5;
-
-    for (int i = 1; i < this.numYears - 1; i++) {
-      // Create local variables for comparison
-      double curComp = this.ud[COMP][i];
-      double prevComp = this.ud[COMP][i - 1];
-      double nextComp = this.ud[COMP][i + 1];
-      double curB4 = this.ud[B4][i];
-      double prevB4 = this.ud[B4][i - 1];
-      double curB5 = this.ud[B5][i];
-      double prevB5 = this.ud[B5][i - 1];
-
-      // Consective low UD (CLUD) vertices
-      // If there is a sudden change in UD values in either B4, B5 or the
-      // composite, calculate the number of drops (defined as the
-      // magnitude of the change divided by the change threshold) in each
-      // of B4, B5 and COMP.  Take the maximum of these drops, square
-      // this value, and add to this.agIndicator
-      if (this.cstSeg[i] == CLUD
-          && (prevComp - curComp > suddenChange
-          || prevB4 - curB4 > suddenChange
-          || prevB5 - curB5 > suddenChange)) {
-        int udAllDrop = (int) ((prevComp - curComp) / suddenChange);
-        int udB5Drop = (int) ((prevB5 - curB5) / suddenChange);
-        int udB4Hike = (int) ((curB4 - prevB4) / suddenChange);
-        int udDropNum = udAllDrop > udB5Drop ? udAllDrop : udB5Drop;
-        udDropNum = udDropNum < udB4Hike ? udB4Hike : udDropNum;
-        udDropNum = Math.min(udDropNum * udDropNum, 16);
-        agIndicator += udDropNum;
-      }
-
-      // Non-consective low and high UD vertices
-      // If there is a sudden change in UD values in udist composite between
-      // this vertex and its neighboring years, calculate the number of
-      // drops (or hikes) as before.  Square this value and add to
-      // this.agIndicator
-      if (this.cstSeg[i] == NCLUD
-          && prevComp - curComp > suddenChange
-          && nextComp - curComp > suddenChange) {
-        double avg = (prevComp + nextComp) / 2.0;
-        int udDip = (int) ((avg - curComp) / suddenChange);
-        udDip = Math.min(udDip * udDip, 16);
-        agIndicator += udDip;
-      }
-
-      if (this.cstSeg[i] == NCHUD
-          && curComp - prevComp > suddenChange
-          && curComp - nextComp > suddenChange) {
-        double avg = (prevComp + nextComp) / 2.0;
-        int udHike = (int) ((curComp - avg) / suddenChange);
-        udHike = Math.min(udHike * udHike, 16);
-        agIndicator += udHike;
-      }
-    }
   }
 
   /**
@@ -1278,7 +1025,8 @@ public class VCT {
    */
   private void setDisturbance(int startYear, int endYear) {
     // Set the disturbance year, disturbance flag and landcover type
-    this.distYear[this.numDist] = startYear;
+    int distIndex = this.numDist;
+    this.distYear[distIndex] = startYear;
     this.distFlag[startYear] = JUST_DISTURBED;
     this.lcType = PART_FOREST;
 
@@ -1300,15 +1048,15 @@ public class VCT {
       }
     }
 
-    // Calculate the change magnitudes based on the peak year
-    calculateChangeMagn(startYear, truePeak);
-
+    // Calculate the change magnitudes
+    this.distMagn[startYear] = this.ud[COMP][truePeak] - this.meanForUdBx[COMP];
+    this.distMagnB4[startYear] = this.ud[B4][truePeak] - this.meanForUdBx[B4];
+    this.distMagnVi[startYear] = this.ud[NDVI][truePeak] - this.meanForUdBx[NDVI];
+    this.distMagnBr[startYear] = this.ud[DNBR][truePeak] - this.meanForUdBx[DNBR];
+  
     // Fit a recovery (regrowth) regression line (B5 vs. years) from the
     // peak year to the end year. High goodness of fit value indicates
     // a very likely change
-//    double[] coeff;
-    int distIndex = this.numDist;
-
     if (endYear - startYear < 4 || this.fiRange < 0.1) {
       this.regrR2[distIndex] = FALSE_FIT[2];
       this.regrSlope[distIndex] = FALSE_FIT[0];
@@ -1337,8 +1085,7 @@ public class VCT {
   }
 
   /**
-   * extract segment data in ud B5 over given time span for linear fit
-   *
+   * Extract segment data in ud B5 over given time span for linear fit
    * This is based on the logic in calculateLinearChangeRate.
    *
    * @param start start of segment inclusive
@@ -1410,76 +1157,6 @@ public class VCT {
       i = j;
     }
   }
-
-  /**
-   * Calculate the change magnitude (in many indexes) for a given disturbance
-   * segment
-   *
-   * @param changeYear - year of initial disturbance onset
-   * @param peakYear   - year of peak disturbance
-   */
-  private void calculateChangeMagn(int changeYear, int peakYear) {
-    // Handle exception
-    // if (changeYear < 0 || changeYear >= this.numYears
-    //         || peakYear < 0 || peakYear >= this.numYears) {
-    //   String msg = "Year out of range in calculateChangeMagn";
-    //   throw new Exception(msg);
-    // }
-
-    // Capture the disturbance magnitudes in UD, NDVI and DNBR spaces.
-    // Magnitudes are relative from the peak UD year to the mean of
-    // the pixel across all years
-    this.distMagn[changeYear]
-        = this.ud[COMP][peakYear] - this.meanForUdBx[COMP];
-    this.distMagnB4[changeYear]
-        = this.ud[B4][peakYear] - this.meanForUdBx[B4];
-    this.distMagnVi[changeYear]
-        = this.ud[NDVI][peakYear] - this.meanForUdBx[NDVI];
-    this.distMagnBr[changeYear]
-        = this.ud[DNBR][peakYear] - this.meanForUdBx[DNBR];
-  }
-
-  /**
-   * Calculate a linear change rate in ud B5 over a given time span using a
-   * simple linear fit
-   *
-   * @param startYear - start year
-   * @param endYear   - end year
-   * @return - Regression coefficients from least squares fit
-   */
-//  private double[] calculateLinearChangeRate(int startYear, int endYear) {
-//    // Too few observations for meaningful regression, or not much
-//    // variability. Return default values
-//    if (endYear - startYear < 4 || this.fiRange < 0.1) {
-//      return FALSE_FIT;
-//    }
-//
-//    // Index errors on start_year, end_year
-//    // if (endYear > this.numYears || startYear < 0) {
-//    //   // Handle exception
-//    //   String msg = "Error: index error in calculateLinearChangeRate";
-//    //   throw new Exception(msg);
-//    // }
-//    //FIXME: (yang) when will this happen?
-//    if (endYear == this.numYears) {
-//      endYear--;
-//    }
-//
-//    // Linear regression of B5 (Y) on years since disturbance (X)
-//    // TODO: Reimplement using LinearLeastSquares - for now using
-//    // Cheng's code for consistency
-//    //
-//    // TODO: Generalize this function for any index
-//    double[] x = new double[this.numYears];
-//    double[] y = new double[this.numYears];
-//    int numObs = endYear - startYear + 1;
-//    for (int i = startYear; i <= endYear; i++) {
-//      int j = i - startYear;
-//      y[j] = this.ud[B5][i];
-//      x[j] = this.yearTable[i] - this.yearTable[startYear];
-//    }
-//    return linearFit(y, x, numObs);
-//  }
 
   /**
    * Determine if a current year's pixel should be considered a minor
@@ -1555,12 +1232,12 @@ public class VCT {
    */
   public class VCTOutput {
 
-    public final List<Integer> years;
-    public final List<Integer> distFlag;
-    public final List<Double> distMagn;
-    public final List<Double> distMagnVi;
-    public final List<Double> distMagnBr;
-    public final List<Double> distMagnB4;
+    public final int[] years;
+    public final int[] distFlag;
+    public final double[] distMagn;
+    public final double[] distMagnVi;
+    public final double[] distMagnBr;
+    public final double[] distMagnB4;
 
     public VCTOutput(int lcType,
                      int nYears,
@@ -1570,23 +1247,27 @@ public class VCT {
                      double[] distMagnVi,
                      double[] distMagnBr,
                      double[] distMagnB4) {
-      this.years = Ints.asList(Arrays.copyOfRange(years, 0, nYears));
+      this.years = Arrays.copyOfRange(years, 0, nYears);
       if (lcType != PART_FOREST) {
-        this.distFlag = new ArrayList<>(Collections.nCopies(nYears, lcType));
-        this.distMagn = new ArrayList<>(Collections.nCopies(nYears, 0.0));
-        this.distMagnVi = new ArrayList<>(Collections.nCopies(nYears, 0.0));
-        this.distMagnBr = new ArrayList<>(Collections.nCopies(nYears, 0.0));
-        this.distMagnB4 = new ArrayList<>(Collections.nCopies(nYears, 0.0));
+        this.distFlag = new int[nYears];
+        Arrays.fill(this.distFlag, lcType);
+        this.distMagn = new double[nYears];
+        Arrays.fill(this.distMagn, -1.0);
+        this.distMagnVi = new double[nYears];
+        Arrays.fill(this.distMagnVi, -1.0);
+        this.distMagnBr = new double[nYears];
+        Arrays.fill(this.distMagnBr, -1.0);
+        this.distMagnB4 = new double[nYears];
+        Arrays.fill(this.distMagnB4, -1.0);
       } else {
-        this.distFlag = Ints.asList(Arrays.copyOfRange(distFlag, 0, nYears));
-        this.distMagn = Doubles.asList(Arrays.copyOfRange(distMagn, 0, nYears));
-        this.distMagnVi = Doubles.asList(Arrays.copyOfRange(distMagnVi, 0, nYears));
-        this.distMagnBr = Doubles.asList(Arrays.copyOfRange(distMagnBr, 0, nYears));
-        this.distMagnB4 = Doubles.asList(Arrays.copyOfRange(distMagnB4, 0, nYears));
+        this.distFlag = Arrays.copyOfRange(distFlag, 0, nYears);
+        this.distMagn = Arrays.copyOfRange(distMagn, 0, nYears);
+        this.distMagnVi = Arrays.copyOfRange(distMagnVi, 0, nYears);
+        this.distMagnBr = Arrays.copyOfRange(distMagnBr, 0, nYears);
+        this.distMagnB4 = Arrays.copyOfRange(distMagnB4, 0, nYears);
       }
     }
   }
-  //}
 
   /**
    * Class for retaining information about segments across a time series
@@ -1629,7 +1310,7 @@ public class VCT {
    * @param right - Right endpoint to use
    * @return - Roughness value
    */
-  private final double fiRoughness(double[] ts, int left, int right) {
+  private double fiRoughness(double[] ts, int left, int right) {
     int numVals = right - left + 1;
 
     if (numVals <= 3) {
@@ -1658,81 +1339,37 @@ public class VCT {
 
   // Almost certainly, these are pre-existing functions somewhere???
   // No error checking done here ...
-
+  
   /**
    * Get a mean value over a slice of an array
    *
-   * //FIXME: (yang) replace with common math, consider delete this
-   *
-   * @param arr   - Array to calculate mean
+   * @param arr - Array to calculate mean
    * @param start - start index of array
-   * @param end   - end index of array (not included!)
+   * @param end - end index of array (not included!)
    * @return - mean value of slice
    */
-//  private double getSliceMean(double[] arr, int start, int end) {
-//    Mean m = new Mean();
-//    return m.evaluate(arr, start, end-start);
-//  }
+  private double getSliceMean(double[] arr, int start, int end) {
+    double sum = 0.0;
+    for (int i = start; i < end; i++) {
+      sum += arr[i];
+    }
+    return ((double) sum / (end - start));
+  }
 
   /**
    * Get a standard deviation value over a slice of an array
    *
-   * //FIXME: (yang) replace with common math, consider delete this
-   *
-   * @param arr   - Array to calculate standard deviation
+   * @param arr - Array to calculate standard deviation
    * @param start - start index of array
-   * @param end   - end index of array (not included!)
+   * @param end - end index of array (not included!)
    * @return - standard deviation value of slice
    */
-//  private double getSliceStd(double[] arr, int start, int end) {
-//    StandardDeviation sd = new StandardDeviation();
-//    return sd.evaluate(arr, start, end-start);
-//  }
-
-  /**
-   * Least-squares linear fit of Y on X
-   *
-   * @param y      - array of dependent values
-   * @param x      - array of independent values
-   * @param numObs - length of array
-   * @return - slope, intercept, r2 and t value of least-squares linear regr.
-   */
-//  private double[] linearFit(double[] y, double[] x, int numObs) {
-//    // TODO: Probably should be replaced with generic linear fitting algorithm
-//    // but kept in here for comparison purposes
-//
-//    double sxx = 0.0;
-//    double sxy = 0.0;
-//    double syy = 0.0;
-//
-//    Mean m = new Mean();
-//    double meanX = m.evaluate(x, 0, numObs);
-//    double meanY = m.evaluate(y, 0, numObs);
-//    for (int i = 0; i < numObs; i++) {
-//      sxx += (x[i] - meanX) * (x[i] - meanX);
-//      syy += (y[i] - meanY) * (y[i] - meanY);
-//      sxy += (y[i] - meanY) * (x[i] - meanX);
-//    }
-//
-//    if (sxx < 0.00001) {
-//      // Handle exception
-//      // String msg = "Error: divided by 0 in linear fit\n";
-//      // throw new Exception(msg);
-//    }
-//
-//    double slope = sxy / sxx;
-//    double intercept = meanY - meanX * slope;
-//    double r2;
-//    if (syy < 0.00001) {
-//      r2 = 0.0;
-//    } else {
-//      r2 = (sxy * sxy) / (sxx * syy);
-//    }
-//    double denom = r2 == 1.0 ? 0.00001 : 1.0 - r2;
-//
-//    // TODO: What is t?
-//    double t = Math.sqrt(r2 * (numObs - 2) / denom);
-//
-//    return new double[]{slope, intercept, r2, t};
-//  }
+  private final double getSliceStd(double[] arr, int start, int end) {
+    double var = 0.0;
+    double mean = getSliceMean(arr, start, end);
+    for (int i = start; i < end; i++) {
+      var += (arr[i] - mean) * (arr[i] - mean);
+    }
+    return Math.sqrt((double) var / (end - start));
+  }
 }
