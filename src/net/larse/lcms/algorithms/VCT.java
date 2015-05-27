@@ -391,7 +391,6 @@ public class VCT {
           else if (prev < 0) {
             for (int k = 0; k < N_BANDS; k++) {
               Arrays.fill(this.ud[k], 0, next, this.ud[k][next]);
-              // fillValues(0, next, next);
             }
           }
           // No acceptable next QA_GOOD - use prev index to fill
@@ -399,7 +398,6 @@ public class VCT {
           else if (next >= this.numYears) {
             for (int k = 0; k < N_BANDS; k++) {
               Arrays.fill(this.ud[k], prev + 1, this.numYears, this.ud[k][prev]);
-              // fillValues(prev+1, this.numYears, prev);
             }
           }
           // Found years acceptable for interpolation - fill between
@@ -417,18 +415,6 @@ public class VCT {
     // Get range values for the composite UD and NDVI
     this.fiRange = Doubles.max(this.ud[COMP]) - Doubles.min(this.ud[COMP]);
   }
-
-//  /**
-//   * A internal help method, not a good design
-//   * @param start start index to fill
-//   * @param end end index to fill
-//   * @param fill index of fill value
-//   */
-//  private void fillValues(int start, int end, int fill) {
-//    for (int k = 0; k < N_BANDS; k++) {
-//      Arrays.fill(this.ud[k], 0, end-start, this.ud[k][fill]);
-//    }
-//  }
 
   /**
    * Main function for determining disturbance and regrowth for this pixel's
