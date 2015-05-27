@@ -75,29 +75,6 @@ public class VCT {
   // Even though not all categories are used, we list them for metadata
   // purposes.  Note that these ARE NOT the same categories as in VCT
   // source code.
-
-  // TODO: (yang) consider to change these to enum.
-  // public enum Mask{
-  //   BACKGROUND(0),
-  //   CLOUD(1),
-  //   CLOUD_EDGE(2),
-  //   SHADOW(3),
-  //   SHADOW_EDGE(4),
-  //   SNOW(5),
-  //   WATER(6),
-  //   CLEAR_LAND(7),
-  //   CORE_FOREST(8),
-  //   CORE_NONFOREST(9),
-  //   CONFIDENT_CLEAR(10),
-  //   FILL_CLASSES(5);
-  //
-  //   private final int value;
-  //
-  //   Mask(int value) {
-  //     this.value = value;
-  //   }
-  // }
-
   private static final int BACKGROUND = 0;
   private static final int CLOUD = 1;
   private static final int CLOUD_EDGE = 2;
@@ -133,6 +110,9 @@ public class VCT {
   private static final int NCLUD = 4;
 
   private static final double[] FALSE_FIT = new double[]{0.0, 25.0, 0.0, 0.0};
+
+  //A local variable to facilitate regression
+  private SimpleRegression sr = new SimpleRegression();
   // </editor-fold>
 
   // <editor-fold defaultstate="collapsed" desc=" VARIABLES ">
@@ -360,7 +340,7 @@ public class VCT {
         badCount++;
         continue;
       }
-      
+
       // Check for cloud/shadow
       if (i == 0) {
         if (isBadEndpoint(i, i + 1)) {
@@ -841,36 +821,6 @@ public class VCT {
     int waterCount = 0;
     int maxLength = 0;
 
-    // TODO: (yang) verify this single for-loop to replace the double
-    // while loop
-    // int currentWaterCount = 0;
-    // int currentLength = 0;
-    // for (int i = 0; i < this.numYears; i++) {
-    //   double tmp = this.ud[COMP][i];
-    //   if (tmp <= maxForUd && tmp >= minForUd) {
-    //     currentLength++;
-    //     if (this.mask[i] == WATER) {
-    //       currentWaterCount++;
-    //     }
-    //   }
-    //   else {
-    //     if (maxLength < currentLength) {
-    //       maxLength = currentLength;
-    //       waterCount = currentWaterCount;
-    //       iEnd = i - 1;
-    //     }
-    //     currentWaterCount = 0;
-    //     currentLength = 0;
-    //     iStart = i;
-    //   }
-    // }
-    // // if the last segment is the longest
-    // if (maxLength < currentLength) {
-    //   maxLength = currentLength;
-    //   waterCount = currentWaterCount;
-    //   iEnd = this.numYears - 1;
-    // }
-
     while (i < this.numYears) {
       // Reset counts
       int yearCount = 0;
@@ -1024,6 +974,7 @@ public class VCT {
    * @param endYear   - disturbance finish year
    */
   private void setDisturbance(int startYear, int endYear) {
+    //TODO: evaluate encapsulate this method within TSSegment
     // Set the disturbance year, disturbance flag and landcover type
     int distIndex = this.numDist;
     this.distYear[distIndex] = startYear;
@@ -1065,14 +1016,12 @@ public class VCT {
     else {
       // Yang replace regression code
       // Note: if common math3 can be used, this code can be simplified.
-      SimpleRegression sr = new SimpleRegression();
-      sr.addData(extractSegmentValues(truePeak, endYear));
+      updateSimpleRegression(truePeak, endYear);
       this.regrR2[distIndex] = sr.getRSquare();
       this.regrSlope[distIndex] = sr.getSlope();
 
       // Fit a regression for the entire disturbance period
-      sr.clear();
-      sr.addData(extractSegmentValues(startYear, endYear));
+      updateSimpleRegression(startYear, endYear);
       this.distR2[distIndex] = sr.getRSquare();
     }
 
@@ -1086,25 +1035,27 @@ public class VCT {
 
   /**
    * Extract segment data in ud B5 over given time span for linear fit
-   * This is based on the logic in calculateLinearChangeRate.
+   * Try to use existing array structure, but it is tightly coupled with
+   * this class structure.
+   *
+   * This could turn into a inner class function.
    *
    * @param start start of segment inclusive
    * @param end end of segment inclusive
    * @return
    */
-  private double[][] extractSegmentValues(int start, int end) {
+  private void updateSimpleRegression(int start, int end) {
     //FIXME: (yang) when will this happen?
     //should make sure endYear always have valid data where it is assigned
     if (end == this.numYears) {
       end--;
     }
 
-    double[][] result = new double[end-start+1][2];
+    sr.clear();
+    double startX = this.yearTable[start];
     for (int i = start; i <= end; i++) {
-      result[i-start][0] = this.yearTable[i] - this.yearTable[start];
-      result[i-start][1] = this.ud[B5][i];
+      sr.addData(this.yearTable[i]-startX, this.ud[B5][i]);
     }
-    return result;
   }
 
   /**
