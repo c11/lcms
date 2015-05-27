@@ -113,6 +113,8 @@ public class VCT {
 
   //A local variable to facilitate regression
   private SimpleRegression sr = new SimpleRegression();
+  private Mean m = new Mean();
+  private StandardDeviation sd = new StandardDeviation(false); //we have to force it to use population estimation
   // </editor-fold>
 
   // <editor-fold defaultstate="collapsed" desc=" VARIABLES ">
@@ -329,8 +331,26 @@ public class VCT {
     //
     // Also, look for spikes and dips that may be unflagged cloud and
     // shadow and set the QA flag accordingly
-    for (int i = 0; i < this.numYears; i++) {
-      
+
+    //check the begining
+    if ((this.mask[0] != 0 && this.mask[0] <= FILL_CLASSES) || isBadEndpoint(0, 1)) {
+      this.qFlag[0] = QA_BAD;
+      badCount++;
+    } else {
+      this.qFlag[0] = QA_GOOD;
+    }
+
+    //check the end
+    if ((this.mask[this.numYears - 1] != 0 && this.mask[this.numYears - 1] <= FILL_CLASSES)
+        || isBadEndpoint(this.numYears-1, this.numYears-2)) {
+      this.qFlag[this.numYears - 1] = QA_BAD;
+      badCount++;
+    } else {
+      this.qFlag[this.numYears - 1] = QA_GOOD;
+    }
+
+    //everything in between
+    for (int i = 1; i < this.numYears-1; i++) {
       // Start by calling the value good
       this.qFlag[i] = QA_GOOD;
       
@@ -341,18 +361,7 @@ public class VCT {
         continue;
       }
 
-      // Check for cloud/shadow
-      if (i == 0) {
-        if (isBadEndpoint(i, i + 1)) {
-          this.qFlag[i] = QA_BAD;
-          badCount++;
-        }
-      } else if (i == this.numYears - 1) {
-        if (isBadEndpoint(i, i - 1)) {
-          this.qFlag[i] = QA_BAD;
-          badCount++;
-        }
-      } else if (isRelativeCloud(i) || isRelativeShadow(i)) {
+      if (isRelativeCloud(i) || isRelativeShadow(i)) {
         this.qFlag[i] = QA_BAD;
         badCount++;
       }
@@ -849,15 +858,13 @@ public class VCT {
     if (maxLength > 0) {
       // Mean m = new Mean();
       for (int j = 0; j < N_BANDS; j++) {
-        // this.meanForUdBx[j] = m.evaluate(this.ud[j], iStart, iEnd - iStart);
-        this.meanForUdBx[j] = getSliceMean(this.ud[j], iStart, iEnd);
+         this.meanForUdBx[j] = m.evaluate(this.ud[j], iStart, iEnd - iStart);
       }
 
       if (maxLength > 1) {
         // StandardDeviation sd = new StandardDeviation(false);
         for (int j = 0; j < N_BANDS; j++) {
-          // this.sdForUdBx[j] = sd.evaluate(this.ud[j], iStart, iEnd - iStart);
-          this.sdForUdBx[j] = getSliceStd(this.ud[j], iStart, iEnd);
+          this.sdForUdBx[j] = sd.evaluate(this.ud[j], iStart, iEnd - iStart);
         }
       } else {
         // Calculate standard deviations using a high SD value if
@@ -1272,41 +1279,5 @@ public class VCT {
       tmpIdx = 3;
     }
     return Math.abs(tmpData[tmpIdx]);
-  }
-
-  // Almost certainly, these are pre-existing functions somewhere???
-  // No error checking done here ...
-  
-  /**
-   * Get a mean value over a slice of an array
-   *
-   * @param arr - Array to calculate mean
-   * @param start - start index of array
-   * @param end - end index of array (not included!)
-   * @return - mean value of slice
-   */
-  private double getSliceMean(double[] arr, int start, int end) {
-    double sum = 0.0;
-    for (int i = start; i < end; i++) {
-      sum += arr[i];
-    }
-    return ((double) sum / (end - start));
-  }
-
-  /**
-   * Get a standard deviation value over a slice of an array
-   *
-   * @param arr - Array to calculate standard deviation
-   * @param start - start index of array
-   * @param end - end index of array (not included!)
-   * @return - standard deviation value of slice
-   */
-  private final double getSliceStd(double[] arr, int start, int end) {
-    double var = 0.0;
-    double mean = getSliceMean(arr, start, end);
-    for (int i = start; i < end; i++) {
-      var += (arr[i] - mean) * (arr[i] - mean);
-    }
-    return Math.sqrt((double) var / (end - start));
   }
 }
