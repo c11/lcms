@@ -53,6 +53,7 @@ public final class Verdet {
   }
 
   private final Args args;
+  private PiecewiseLinear fit;
 
   public Verdet() {
     this.args = new Args();
@@ -60,6 +61,7 @@ public final class Verdet {
 
   public Verdet(Args args) {
     this.args = args;
+    this.fit = new PiecewiseLinear();
   }
 
   /**
@@ -68,14 +70,16 @@ public final class Verdet {
    * @return
    */
   public double[] getResult(double[] a) {
+    this.fit.init(a.length);
+
     //Fixe negative scores
     for (int i = 0; i < a.length; i++) {
       a[i] = a[i] < 0.0 ? 1e-5 : a[i];
     }
 
-    double[] X = fitPiecewiseLinear(a);
+    double[] X = fit.piecewiseLinear(a);
 
-    double[] score = new double[X.length];
+    double[] score = new double[a.length];
     for (int i = 1; i < score.length; i++) {
       score[i] = X[i] - X[i-1];
     }
@@ -83,198 +87,199 @@ public final class Verdet {
     return score;
   }
 
-  public double[] fitPiecewiseLinear(double[] B) {
-    double[] G = tv1DMany(B);
+  class PiecewiseLinear {
+    private int size;
+    double[] T1;
+    private int[] C;
+    private int[] cc;
+    private double[] g;
+    private double[] O;
+    private OLSMultipleLinearRegression ols;
+    private SimpleMatrix A;
+    private SimpleMatrix f;
 
-    //TODO: should this be a parameter?
-    double dx = 0.005;
-
-    //Orignal Matlab code use loop to iterate the multi-dimensional G
-    //TODO: check to see if the multi-dimensional data are necessary
-
-    int[] N = new int[B.length];
-    for (int i = 0; i < B.length; i++) {
-      N[i] = i;
+    PiecewiseLinear() {
+      ols = new OLSMultipleLinearRegression();
+      ols.setNoIntercept(true);
     }
 
-    double[] T = G.clone();
+    public void init(int size) {
+      if (this.size == size) {
+        return;
+      }
 
-    double[] T1 = new double[B.length];
+      this.size = size;
+      T1 = new double[size];
+      C = new int[size];
+      cc = new int[size];
+      g = new double[size];
+      O = new double[size];
 
-//    double[] YY = B.clone();
+      A = new SimpleMatrix(size, size);
+    }
 
-    while (!Arrays.equals(T1, T)) {
-      T1 = T.clone();
+    public double[] piecewiseLinear(double[] B) {
+      //TODO: should this be a parameter?
+      double dx = 0.005;
 
-      //TODO: the follow section can be optimized to remove unnecessary array
-      //I think most of them can be simplied to use just local variables.
-      double[] dT = new double[T.length-1];
-      double[] Q = new double[T.length-1];
-      double[] num = new double[T.length-2];
-      double[] den = new double[T.length-2];
-      double[] R = new double[T.length-2];
+      //Orignal Matlab code use loop to iterate the multi-dimensional G
+      //TODO: check to see if the multi-dimensional data are necessary
+      Arrays.fill(T1, 0);
+      Arrays.fill(cc, 0);
 
-      int[] C = new int[T.length];
-      C[0] = 1;
-      C[T.length-1] = 1;
-      int[] cc = new int[T.length];
+      // G was unused except to initialize T.
+      double[] T = tv1DMany(B);
 
-      IntArrayList f = new IntArrayList();
-      f.add(0); //add first element
+      //    double[] YY = B.clone();
 
-      for (int i = 0; i < dT.length; i++) {
-        dT[i] = T[i+1] - T[i];
-        Q[i] = Math.sqrt(dx + dT[i]*dT[i]);
-        if (i < dT.length-1) {
-          num[i] = dT[i] * (T[i + 2] - T[i + 1]);
-          den[i] = Q[i] * Math.sqrt(dx + (T[i + 2] - T[i + 1]) * (T[i + 2] - T[i + 1]));
-          R[i] = 1 - (num[i] + dx) / den[i];
-          if (R[i] > 0.025) {
-            C[i + 1] = 1;
-            f.add(i + 1);
+      while (!Arrays.equals(T1, T)) {
+        // Dont use clone.
+        System.arraycopy(T, 0, T1, 0, size);
+
+        //TODO: the follow section can be optimized to remove unnecessary array
+        //I think most of them can be simplied to use just local variables.
+
+        Arrays.fill(C, 0);
+        C[0] = 1;
+        C[T.length-1] = 1;
+
+        IntArrayList f = new IntArrayList();
+        f.add(0); //add first element
+
+        for (int i = 0; i < size - 1; i++) {
+          double dT = T[i+1] - T[i];
+          double Q = Math.sqrt(dx + dT*dT);
+          if (i < size - 2) {
+            double forward = T[i + 2] - T[i + 1];
+            double numerator = dT * forward;
+            double denominator = Q * Math.sqrt(dx + forward * forward);
+            double R = 1 - (numerator + dx) / denominator;
+            if (R > 0.025) {
+              C[i + 1] = 1;
+              f.add(i + 1);
+            }
+          }
+          if (i > 0) {
+            cc[i] = cc[i-1] + C[i];
           }
         }
-        if (i > 0) {
-          cc[i] = cc[i-1] + C[i];
+
+        //Add the last elements
+        f.add(size - 1);
+        f.add(size);
+        cc[size - 1] = cc[size - 2] + C[size - 1];
+
+        for (int i = 0; i < g.length; i++) {
+          g[i] = 1.0* (i - f.get(cc[i])) / (f.get(cc[i]+1) - f.get(cc[i]));
+        }
+
+        //      int aSize = B.length * (cc[cc.length-1] + 1);
+        //      double[] A = new double[aSize];
+        //
+        //      for (int i = 0; i < B.length; i++) {
+        //        A[cc[i] * B.length + N[i]] = 1 - g[i];
+        //
+        //        if (i < B.length-1) {
+        //          A[(cc[i]+1) * B.length + N[i]] = g[i];
+        //        }
+        //      }
+
+        //int aSize = B.length * (cc[cc.length-1] + 1);
+        int nA = cc[size - 1] + 1;
+        double[][] A = new double[size][nA];
+
+        for (int i = 0; i < size; i++) {
+          int idx = cc[i] * size + i;
+          int row = idx % size;
+          int col = idx / size;
+
+          A[row][col] = 1 - g[i];
+          if (i < size-1) {
+            A[row][col+1] = g[i];
+          }
+        }
+
+        ols.newSampleData(B, A);
+        double[] b = ols.estimateRegressionParameters();
+
+        // It's probably worth doing this simple multiply by hand to avoid creating 2 new objects.
+        // Especially since you just grab the data out of the
+        SimpleMatrix st = new SimpleMatrix(A).mult(new SimpleMatrix(2, 1, true, b));
+        T = st.getMatrix().getData();
+      }
+
+      return T;
+    }
+
+    /**
+     * The original implementation uses a multi-dimension array for X,
+     * which does not see to be necessary, as each time it is only run on
+     * single index.
+     *
+     * //TODO: variable names followed original matlab code, change to meaningful names
+     *
+     * @param X
+     */
+    public double[] tv1DMany(double[] X) {
+      for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+          A.set(j, i, i <= j ? 1.0 : 0);
         }
       }
 
-      //Add the last elements
-      f.add(T.length-1);
-      f.add(T.length);
+      SimpleMatrix AtA = A.transpose().mult(A);
 
-      cc[T.length-1] = cc[T.length-2] + C[T.length-1];
-
-      double[] g = new double[B.length];
-      for (int i = 0; i < g.length; i++) {
-        g[i] = 1.0* (N[i] - f.get(cc[i])) / (f.get(cc[i]+1) - f.get(cc[i]));
+      //Orignal Matlab code use loop to iterate the multi-diemsional X
+      for (int i = 0; i < size; i++) {
+        f.set(i, X[i] - X[0]);
       }
 
-//      int aSize = B.length * (cc[cc.length-1] + 1);
-//      double[] A = new double[aSize];
-//
-//      for (int i = 0; i < B.length; i++) {
-//        A[cc[i] * B.length + N[i]] = 1 - g[i];
-//
-//        if (i < B.length-1) {
-//          A[(cc[i]+1) * B.length + N[i]] = g[i];
-//        }
-//      }
+      SimpleMatrix Atf = A.transpose().mult(f);
 
-      //int aSize = B.length * (cc[cc.length-1] + 1);
-      int nA = cc[cc.length-1] + 1;
-      double[][] A = new double[B.length][nA];
+      //initialize some initial variables
+      SimpleMatrix u = f;
+      SimpleMatrix u1 = f.copy();
+      u1.set(Double.POSITIVE_INFINITY);
 
-      for (int i = 0; i < B.length; i++) {
-        int idx = cc[i] * B.length + N[i];
-        int row = idx % B.length;
-        int col = idx / B.length;
+      for (int i=0; i < args.nRuns; i++) {
+        System.out.println(i);
 
-        A[row][col] = 1 - g[i];
-        if (i < B.length-1) {
-          A[row][col+1] = g[i];
+        double prev = 0;
+        double curr = 0;
+        for (int j = 0; j < size - 1; j++) {
+          curr = args.alpha / (1e-6 + Math.abs(u.get(j+1) - u.get(j)));
+          // Diagonal (L)
+          AtA.set(j, j, AtA.get(j, j) + prev + curr);
+          // Off diagonals.
+          if (j > 0) {
+            AtA.set(j,     j - 1, AtA.get(j,     j - 1) - curr);
+            AtA.set(j - 1, j,     AtA.get(j - 1, j    ) - curr);
+          }
+          if (j < size - 1) {
+            AtA.set(j,     j + 1, AtA.get(j,     j + 1) - curr);
+            AtA.set(j + 1, j,     AtA.get(j + 1, j    ) - curr);
+          }
         }
-      }
+        AtA.set(size - 1, size - 1, AtA.get(size - 1, size -1) + curr);
 
-//      SimpleMatrix matrixA = new SimpleMatrix(B.length, 2, false, A);
-      OLSMultipleLinearRegression ols = new OLSMultipleLinearRegression();
-      ols.setNoIntercept(true);
-      ols.newSampleData(B, A);
-      double[] b = ols.estimateRegressionParameters();
-
-      SimpleMatrix st = new SimpleMatrix(A).mult(new SimpleMatrix(2, 1, true, b));
-
-      T = st.getMatrix().getData().clone();
-    }
-
-    return T;
-  }
-
-
-  /**
-   * The original implemention uses a multi-dimension array for X,
-   * which does not see to be necessary, as each time it is only run on
-   * single index.
-   *
-   * //TODO: variable names followed original matlab code, change to meaningful names
-   *
-   * @param X
-   */
-  public double[] tv1DMany(double[] X) {
-
-    SimpleMatrix A = new SimpleMatrix(X.length, X.length);
-    for (int i = 0; i < X.length; i++) {
-      for (int j = 0; j < X.length; j++) {
-        A.set(j, i, i <= j ? 1.0 : 0);
-      }
-    }
-
-    SimpleMatrix AtA = A.transpose().mult(A);
-    double[] O = new double[X.length];
-
-    //Orignal Matlab code use loop to iterate the multi-diemsional X
-    double[] f = new double[X.length];
-    for (int i = 0; i < X.length; i++) {
-      f[i] = X[i] - X[0];
-    }
-
-    SimpleMatrix Atf = A.transpose().mult(new SimpleMatrix(f.length, 1, true, f));
-
-    //initialize some initial variables
-    double[] u = f.clone();
-    double[] u1 = new double[X.length];
-    for (int i=0; i < X.length; i++) {
-      u1[i] = Double.POSITIVE_INFINITY;
-    }
-
-    for (int i=0; i < args.nRuns; i++) {
-      System.out.println(i);
-
-      double[] E = new double[X.length-1];
-      SimpleMatrix t = new SimpleMatrix(X.length, X.length);
-      SimpleMatrix L = new SimpleMatrix(X.length, X.length);
-
-      for (int j = 0; j < E.length; j++) {
-
-
-        E[j] = args.alpha / (1e-6 + Math.abs(u[j+1]-u[j]));
-        t.set(j, j+1, E[j]);
-        if (j == 0) {
-          L.set(j, j, E[j]);
-        }
-        else {
-          L.set(j, j, E[j-1]+E[j]);
-        }
-      }
-      L.set(X.length-1, X.length-1, E[E.length-1]);
-
-      L = L.minus(t).minus(t.transpose());
-
-      u = AtA.plus(L).solve(Atf).getMatrix().getData();
-
-      //have we reach convergence
-      boolean success = true;
-      for (int ui = 0; ui < u.length; ui++) {
-        if (Math.abs(u1[ui] - u[ui]) > args.tolerance) {
-          success = false;
+        u = AtA.solve(Atf);
+        // Have we reach convergence?
+        if (u1.minus(u).elementMaxAbs() <= args.tolerance) {
           break;
         }
+
+        //Original Matlab code, which may not be necessary here
+        //if any(isnan(u)); u=u1; break; end;
+        u1 = u;
       }
-      if (success) {
-        break;
+
+      //Integration U, adding f0 back in
+      u = A.mult(u);
+      for (int i = 0; i < size; i++) {
+        O[i] = u.get(i) + X[0];
       }
 
-      //Original Matlab code, which may not be necessary here
-      //if any(isnan(u)); u=u1; break; end;
-      u1 = u.clone();
+      return O;
     }
-
-    //Integration U, adding f0 back in
-    O = A.mult(new SimpleMatrix(u.length, 1, true, u)).getMatrix().getData();
-    for (int i = 0; i < O.length; i++) {
-      O[i]+= X[0];
-    }
-
-    return O;
   }
 }
