@@ -245,7 +245,7 @@ public final class Verdet {
       u1.set(Double.POSITIVE_INFINITY);
 
       for (int i=0; i < args.nRuns; i++) {
-        System.out.println(i);
+        //System.out.println(i);
 
         double prev = 0;
         double curr = 0;
