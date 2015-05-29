@@ -57,6 +57,7 @@ public final class Verdet {
 
   public Verdet() {
     this.args = new Args();
+    this.fit = new PiecewiseLinear();
   }
 
   public Verdet(Args args) {
@@ -116,6 +117,7 @@ public final class Verdet {
       O = new double[size];
 
       A = new SimpleMatrix(size, size);
+      f = new SimpleMatrix(size, 1);
     }
 
     public double[] piecewiseLinear(double[] B) {
@@ -228,6 +230,7 @@ public final class Verdet {
       }
 
       SimpleMatrix AtA = A.transpose().mult(A);
+      SimpleMatrix ataClone = AtA.copy();
 
       //Orignal Matlab code use loop to iterate the multi-diemsional X
       for (int i = 0; i < size; i++) {
@@ -249,18 +252,13 @@ public final class Verdet {
         for (int j = 0; j < size - 1; j++) {
           curr = args.alpha / (1e-6 + Math.abs(u.get(j+1) - u.get(j)));
           // Diagonal (L)
-          AtA.set(j, j, AtA.get(j, j) + prev + curr);
+          AtA.set(j, j, ataClone.get(j, j) + prev + curr);
           // Off diagonals.
-          if (j > 0) {
-            AtA.set(j,     j - 1, AtA.get(j,     j - 1) - curr);
-            AtA.set(j - 1, j,     AtA.get(j - 1, j    ) - curr);
-          }
-          if (j < size - 1) {
-            AtA.set(j,     j + 1, AtA.get(j,     j + 1) - curr);
-            AtA.set(j + 1, j,     AtA.get(j + 1, j    ) - curr);
-          }
+          AtA.set(j,     j + 1, ataClone.get(j,     j + 1) - curr);
+          AtA.set(j + 1, j,     ataClone.get(j + 1, j    ) - curr);
+          prev = curr;
         }
-        AtA.set(size - 1, size - 1, AtA.get(size - 1, size -1) + curr);
+        AtA.set(size - 1, size - 1, ataClone.get(size - 1, size -1) + curr);
 
         u = AtA.solve(Atf);
         // Have we reach convergence?
