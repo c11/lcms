@@ -195,7 +195,7 @@ public final class Verdet {
 
       // It's probably worth doing this simple multiply by hand to avoid creating 2 new objects.
       // Especially since you just grab the data out of the
-      SimpleMatrix st = new SimpleMatrix(A).mult(new SimpleMatrix(2, 1, true, b));
+      SimpleMatrix st = new SimpleMatrix(A).mult(new SimpleMatrix(b.length, 1, true, b));
       T = st.getMatrix().getData();
     }
 
