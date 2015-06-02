@@ -58,8 +58,14 @@ public final class Verdet {
   private double[] g;
   private double[] O;
   private OLSMultipleLinearRegression ols;
-  private SimpleMatrix A;
-  private SimpleMatrix f;
+
+  private DenseMatrix64F A;
+  private DenseMatrix64F AtA;
+  private DenseMatrix64F ataClone;
+  private DenseMatrix64F f;
+  private DenseMatrix64F Atf;
+  private DenseMatrix64F u;
+  private DenseMatrix64F u1;
 
   public Verdet() {
     this(new Args());
@@ -105,8 +111,13 @@ public final class Verdet {
     g = new double[size];
     O = new double[size];
 
-    A = new SimpleMatrix(size, size);
-    f = new SimpleMatrix(size, 1);
+    A = new DenseMatrix64F(size, size);
+    AtA = new DenseMatrix64F(size, size);
+    ataClone = new DenseMatrix64F(size, size);
+    f = new DenseMatrix64F(size, 1);
+    Atf = new DenseMatrix64F(size, 1);
+    u = new DenseMatrix64F(size, 1);
+    u1 = new DenseMatrix64F(size, 1);
   }
 
   public double[] piecewiseLinear(double[] B) {
@@ -211,6 +222,7 @@ public final class Verdet {
    *
    * @param X
    */
+
   public double[] tv1DMany(double[] X) {
     for (int i = 0; i < size; i++) {
       for (int j = 0; j < size; j++) {
@@ -218,20 +230,19 @@ public final class Verdet {
       }
     }
 
-    SimpleMatrix AtA = A.transpose().mult(A);
-    SimpleMatrix ataClone = AtA.copy();
+    CommonOps.multTransA(A, A, AtA);
+    copy(AtA, ataClone);
 
     //Orignal Matlab code use loop to iterate the multi-diemsional X
     for (int i = 0; i < size; i++) {
       f.set(i, X[i] - X[0]);
     }
 
-    SimpleMatrix Atf = A.transpose().mult(f);
+    CommonOps.multTransA(A, f, Atf);
 
     //initialize some initial variables
-    SimpleMatrix u = f;
-    SimpleMatrix u1 = f.copy();
-    u1.set(Double.POSITIVE_INFINITY);
+    copy(f, u);
+    CommonOps.set(u1, Double.POSITIVE_INFINITY);
 
     for (int i=0; i < args.nRuns; i++) {
       //System.out.println(i);
@@ -245,27 +256,37 @@ public final class Verdet {
         // Off diagonals.
         AtA.set(j,     j + 1, ataClone.get(j,     j + 1) - curr);
         AtA.set(j + 1, j,     ataClone.get(j + 1, j    ) - curr);
+
         prev = curr;
       }
       AtA.set(size - 1, size - 1, ataClone.get(size - 1, size -1) + curr);
 
-      u = AtA.solve(Atf);
+      CommonOps.solve(AtA, Atf, u);
+      CommonOps.sub(u1, u, u1);
       // Have we reach convergence?
-      if (u1.minus(u).elementMaxAbs() <= args.tolerance) {
+      if (CommonOps.elementMaxAbs(u1) <= args.tolerance) {
         break;
       }
 
       //Original Matlab code, which may not be necessary here
       //if any(isnan(u)); u=u1; break; end;
-      u1 = u;
+      copy(u, u1);
     }
 
     //Integration U, adding f0 back in
-    u = A.mult(u);
+    CommonOps.mult(A, u, u1);
     for (int i = 0; i < size; i++) {
-      O[i] = u.get(i) + X[0];
+      O[i] = u1.get(i) + X[0];
     }
 
     return O;
+  }
+
+  void copy(DenseMatrix64F a, DenseMatrix64F b) {
+    for( int i = 0; i < a.numRows; i++ ) {
+      for( int j = 0; j < a.numCols; j++ ) {
+          b.set(i, j, a.get(i, j));
+      }
+    }
   }
 }
