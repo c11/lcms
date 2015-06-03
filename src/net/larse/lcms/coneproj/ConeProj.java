@@ -78,14 +78,31 @@ public class ConeProj {
    * @return PolarConeProjectionResult
    */
   public static PolarConeProjectionResult coneA(double[] y, SimpleMatrix matrix) {
+    int n = y.length;
+    double[] ny = Arrays.copyOf(y, y.length);
+    SimpleMatrix smNY = new SimpleMatrix(new DenseMatrix64F(y.length, 1, true, ny));
+    return ConeProj.coneA(smNY, matrix);
+  }
+  /**
+   * This routine implements the hinge algorithm for cone projection to minimize
+   * ||y - θ||^2 over the cone C of the form \{θ: Aθ ≥ 0\}.
+   *
+   * @param y A vector of length n
+   * @param matrix A constraint matrix. The rows of amat must be irreducible.
+   *               The column number of amat must equal the length of y.
+   * @return PolarConeProjectionResult
+   */
+  public static PolarConeProjectionResult coneA(SimpleMatrix y, SimpleMatrix matrix) {
+
     PolarConeProjectionResult result = null;
 
-    int n = y.length;
+//    int n = y.length;
+    int n = y.numRows();
     int m = matrix.numRows();
 
     SimpleMatrix namat = new SimpleMatrix(matrix);
-    double[] ny = Arrays.copyOf(y, y.length);
-    SimpleMatrix smNY = new SimpleMatrix(new DenseMatrix64F(y.length, 1, true, ny));
+//    double[] ny = Arrays.copyOf(y, y.length);
+//    SimpleMatrix smNY = new SimpleMatrix(new DenseMatrix64F(y.length, 1, true, ny));
 
     double sm = 1e-8;
 
@@ -106,8 +123,8 @@ public class ConeProj {
     }
 
     SimpleMatrix delta = amat_in.negative();
-    SimpleMatrix b2 = delta.mult(smNY);
-
+//    SimpleMatrix b2 = delta.mult(smNY);
+    SimpleMatrix b2 = delta.mult(y);
     SimpleMatrix theta = new SimpleMatrix(n, 1);
     double maxB2 = StatUtils.max(b2.getMatrix().getData());
     if (maxB2 > 2 * sm) {
@@ -143,7 +160,8 @@ public class ConeProj {
         xmat.setRow(i, 0, delta.extractVector(true, indices.get(i)).getMatrix().getData());
       }
 
-      SimpleMatrix a = xmat.mult(xmat.transpose()).solve(xmat.mult(smNY));
+//      SimpleMatrix a = xmat.mult(xmat.transpose()).solve(xmat.mult(smNY));
+      SimpleMatrix a = xmat.mult(xmat.transpose()).solve(xmat.mult(y));
       double[] avec = new double[m];
       double minA = StatUtils.min(a.getMatrix().getData());
       if (minA < -sm) {
@@ -166,8 +184,8 @@ public class ConeProj {
       else {
         check = true;
         theta = xmat.transpose().mult(a);
-        b2 = delta.mult(smNY.minus(theta)).divide(n);
-
+//        b2 = delta.mult(smNY.minus(theta)).divide(n);
+        b2 = delta.mult(y.minus(theta)).divide(n);
 
         maxB2 = StatUtils.max(b2.getMatrix().getData());
         if (maxB2 > 2 * sm) {
@@ -183,7 +201,8 @@ public class ConeProj {
       }
     }
 
-    SimpleMatrix thetahat = smNY.minus(theta);
+//    SimpleMatrix thetahat = smNY.minus(theta);
+    SimpleMatrix thetahat = y.minus(theta);
 
     int sum = 0;
     for (int i = 0; i < h.length; i++) {
@@ -461,12 +480,21 @@ public class ConeProj {
    * @return PolarConeProjectionResult
    */
   public static PolarConeProjectionResult qprog(SimpleMatrix q, double[] c, SimpleMatrix amat, double[] b) {
-    PolarConeProjectionResult result = null;
-
-    int n = c.length;
-    int m = amat.numRows();
-
     SimpleMatrix nc = new SimpleMatrix(c.length, 1, true, c);
+    return ConeProj.qprog(q, nc, amat, b);
+  }
+
+  public static PolarConeProjectionResult qprog(SimpleMatrix q, SimpleMatrix c, SimpleMatrix amat, double[] b) {
+      PolarConeProjectionResult result = null;
+
+//    int n = c.length;
+//    int m = amat.numRows();
+//    SimpleMatrix nc = new SimpleMatrix(c.length, 1, true, c);
+
+    int n = c.numRows();
+    int m = amat.numRows();
+    SimpleMatrix nc = c;
+
     SimpleMatrix namat = new SimpleMatrix(amat);
     SimpleMatrix nq = new SimpleMatrix(q);
     SimpleMatrix theta0 = new SimpleMatrix(n, 1);
