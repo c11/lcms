@@ -3,6 +3,8 @@ package net.larse.lcms.algorithms;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.larse.lcms.helper.AlgorithmBase;
 import org.apache.commons.math.stat.regression.OLSMultipleLinearRegression;
+import org.ejml.data.DenseMatrix64F;
+import org.ejml.ops.CommonOps;
 import org.ejml.simple.SimpleMatrix;
 
 import java.util.Arrays;
