@@ -1,0 +1,1 @@
+This folder contains the testing images for VCT. Each image is a multi-bands image with each band represents a year (2002 - 2012). 
