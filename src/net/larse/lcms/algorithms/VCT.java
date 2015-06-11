@@ -237,7 +237,7 @@ public class VCT {
    * these threshold bounds are exceeded.
    *
    * @param ud    - List of all UD values across all pertinent bands and indices
-   *                (B3, B4, B5, B7, thermal, NDVI, DNBR, R45). There is
+   *                (B3, B4, B5, B7, thermal, NDVI, DNBR, COMP). There is
    *                one List per index which contains values for all years.
    * @param mask  - List of mask values for this pixel across all years
    * @param years - List of years corresponding to the indices in ud and mask
