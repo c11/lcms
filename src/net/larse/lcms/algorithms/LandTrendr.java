@@ -35,6 +35,7 @@ import org.ejml.data.DenseMatrix64F;
 
 import riso.numerical.SpecialMath;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -112,6 +113,53 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 //      }
 //      Collections.sort(images);
     }
+
+    /**
+     *  Force vertices on a different time series of spectral indices. 
+     *
+     * @param vertices the vertex year from getResult()
+     * @param x year information for the new spectral index
+     * @param y array of spectral values for the new index to be fitted
+     * @return double[] fitted value for the provided spectral index
+     */
+    public double[] getFTVResult(DoubleArrayList vertices, DoubleArrayList x, DoubleArrayList y) {
+      Model model;
+
+      DoubleArrayList years = new DoubleArrayList(x);
+      DoubleArrayList rawValues = new DoubleArrayList(y);
+
+      int nObs = rawValues.size();
+      double[] values = rawValues.toDoubleArray();
+      double[] times = years.toDoubleArray();
+      for (int i = 0; i < nObs; i++) {
+        // subtract the minimum year (the collection was sorted before)
+        times[i] = years.get(i) - years.get(0);
+      }
+
+      // pre-calculates the mean of the values.
+      double valuesMean = 0.0;
+      for (int i = 0; i < values.length; i++) {
+        valuesMean += values[i];
+      }
+      valuesMean /= values.length;
+
+      // apply the smoothing algorithm
+      desawtooth(values, spikeThreshold);
+
+      //vertices is actual year, need to convert them to indices in x.
+      //the following line is placeholder, need to fix!!!
+      List<Integer> tmpVertices = new ArrayList<>();
+
+      // construct from vertices;
+      for (int i = 0; i < vertices.size(); i++) {
+        tmpVertices.add(vertices.get(i).intValue() - years.get(0).intValue());
+      }
+
+      model = new ModelNormal(tmpVertices, times, values, valuesMean);
+
+      return model.yFitted;
+    }
+
 
     /**
      *  This is the main function of LandTrendr. For each pixel at position
@@ -210,8 +258,8 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
     @VisibleForTesting
     public class Model {
       // a pointer to the x and y values.
-      double[] x;
-      double[] y;
+      public double[] x;
+      public double[] y;
       // the vertices that delimits the beginning and ending of each segment.
       public List<Integer> vertices;
       // the intercept of each segment.
@@ -802,7 +850,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
         // if the biggest MSE is zero, we are done, even if we have not
         // fitted all the segments.
-        if (maxSegmentMSE <= 0.0) {
+        if (maxSegmentMSE <= 0.0 || vertexToBreakAt==-1) {
           break;
         }
 
