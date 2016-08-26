@@ -28,6 +28,8 @@ import com.google.common.primitives.Doubles;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 
 import org.apache.commons.math.FunctionEvaluationException;
+import org.apache.commons.math.analysis.interpolation.LinearInterpolator;
+import org.apache.commons.math.analysis.polynomials.PolynomialSplineFunction;
 import org.apache.commons.math.optimization.fitting.CurveFitter;
 import org.apache.commons.math.optimization.fitting.ParametricRealFunction;
 import org.apache.commons.math.optimization.general.LevenbergMarquardtOptimizer;
@@ -118,30 +120,35 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
      *  Force vertices on a different time series of spectral indices. 
      *
      * @param vertices the vertex year from getResult()
-     * @param x year information for the new spectral index
-     * @param y array of spectral values for the new index to be fitted
+     * @param x year information for the new spectral index, masked pixel should be included also.
+     * @param y array of spectral values for the new index to be fitted, mased pixel should included as 0.
      * @return double[] fitted value for the provided spectral index
      */
     public double[] getFTVResult(DoubleArrayList vertices, DoubleArrayList x, DoubleArrayList y) {
       Model model;
 
-      DoubleArrayList years = new DoubleArrayList(x);
-      DoubleArrayList rawValues = new DoubleArrayList(y);
+      DoubleArrayList years = new DoubleArrayList();
+      DoubleArrayList rawValues = new DoubleArrayList();
+
+      //filter out background data and precalculate the mean
+      for (int i = 0; i < y.size(); i++) {
+        if (Double.compare(y.get(i), 0) != 0) {
+          years.add(x.get(i));
+          rawValues.add(y.get(i));
+        }
+      }
 
       int nObs = rawValues.size();
       double[] values = rawValues.toDoubleArray();
       double[] times = years.toDoubleArray();
+      double valuesMean = 0.0;
+
       for (int i = 0; i < nObs; i++) {
         // subtract the minimum year (the collection was sorted before)
         times[i] = years.get(i) - years.get(0);
+        valuesMean += rawValues.get(i);
       }
-
-      // pre-calculates the mean of the values.
-      double valuesMean = 0.0;
-      for (int i = 0; i < values.length; i++) {
-        valuesMean += values[i];
-      }
-      valuesMean /= values.length;
+      valuesMean /= nObs;
 
       // apply the smoothing algorithm
       desawtooth(values, spikeThreshold);
@@ -152,12 +159,38 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
       // construct from vertices;
       for (int i = 0; i < vertices.size(); i++) {
-        tmpVertices.add(vertices.get(i).intValue() - years.get(0).intValue());
+        tmpVertices.add(years.indexOf(vertices.get(i)));
       }
 
       model = new ModelNormal(tmpVertices, times, values, valuesMean);
 
-      return model.yFitted;
+      double[] result = model.yFitted;
+
+      //if there are data being filtered out.
+      if (years.size() != x.size()) {
+        LinearInterpolator li = new LinearInterpolator();
+        PolynomialSplineFunction psf = li.interpolate(years.toDoubleArray(), model.yFitted);
+
+        result = new double[x.size()];
+        for (int i = 0; i < x.size(); i++) {
+          if (x.get(i) < years.get(0)) {
+            result[i] = model.yFitted[0];
+          }
+          else if (x.get(i) > years.get(years.size()-1)) {
+            result[i] = model.yFitted[years.size()-1];
+          }
+          else {
+            try {
+              result[i] = psf.value(x.get(i));
+            }
+            catch (Exception e) {
+              //this will never happen.
+            }
+          }
+        }
+
+      }
+      return result;
     }
 
 
