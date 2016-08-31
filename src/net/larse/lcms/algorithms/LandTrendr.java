@@ -69,6 +69,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
     private final double recoveryThreshold;
     private final double pvalThreshold;
     private final double bestModelProportion;
+    private final int minObservationsNeeded;
 
     //private final int numImages;
 
@@ -83,6 +84,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       this.recoveryThreshold = 0.25;
       this.pvalThreshold = 0.05;
       this.bestModelProportion = 0.75;
+      this.minObservationsNeeded = 6;
     }
 
 
@@ -92,7 +94,8 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
         boolean preventOneYearRecovery,
         double recoveryThreshold,
         double pvalThreshold,
-        double bestModelProportion) {
+        double bestModelProportion,
+        int minObservationsNeeded) {
 
         //PixelFunctionCollection[] inputs) {
       this.spikeThreshold = spikeThreshold;
@@ -102,7 +105,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       this.recoveryThreshold = recoveryThreshold;
       this.pvalThreshold = pvalThreshold;
       this.bestModelProportion = bestModelProportion;
-
+      this.minObservationsNeeded = minObservationsNeeded;
 
       //this.numImages = inputs[0].size();
 
@@ -131,14 +134,23 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       DoubleArrayList rawValues = new DoubleArrayList();
 
       //filter out background data and precalculate the mean
+      //assuming the GEE caller fills the masked value with Double.NaN
       for (int i = 0; i < y.size(); i++) {
-        if (Double.compare(y.get(i), 0) != 0) {
+        if (!y.get(i).isNaN()) {
           years.add(x.get(i));
           rawValues.add(y.get(i));
         }
       }
 
       int nObs = rawValues.size();
+
+      //if there are not enough observations, just return
+      if (nObs < minObservationsNeeded) {
+        double[] nan = new double[x.size()];
+        Arrays.fill(nan, Double.NaN);
+        return nan;
+      }
+
       double[] values = rawValues.toDoubleArray();
       double[] times = years.toDoubleArray();
       double valuesMean = 0.0;
@@ -217,6 +229,12 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       Model model;
       double[] yearsArray;
       double[] rawValuesArray;
+
+      //YANG: I was under the impression that the GEE caller for this function
+      //already filtered out masked value
+      if (x.size() < minObservationsNeeded) {
+        return null;
+      }
 
       //Yang: mask MemoryScope usage
       //try (MemoryScope scope = MemoryScope.newTransient()) {
