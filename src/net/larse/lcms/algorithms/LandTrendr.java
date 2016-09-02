@@ -135,10 +135,18 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
       //filter out background data and precalculate the mean
       //assuming the GEE caller fills the masked value with Double.NaN
+      //Sept 2. If start year is before the first vertex or end year is after the vertex
+      // they are excluded from FTV, but will be assigned to the start or end value from
+      // the FTV output based on [minYear, maxYear] from vertices.
+      double startVertexYear = vertices.get(0);
+      double endVertexYear = vertices.get(vertices.size()-1);
       for (int i = 0; i < y.size(); i++) {
         if (!y.get(i).isNaN()) {
-          years.add(x.get(i));
-          rawValues.add(y.get(i));
+          //only keep years that is within the range of vertices
+          if (Double.compare(x.get(i), startVertexYear) >= 0 && Double.compare(x.get(i), endVertexYear) <=0) {
+            years.add(x.get(i));
+            rawValues.add(y.get(i));
+          }
         }
       }
 
@@ -170,8 +178,31 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       List<Integer> tmpVertices = new ArrayList<>();
 
       // construct from vertices;
+      boolean firstVertexOutOfRange = false;
+      double startYear = years.get(0);
+      double endYear = years.get(years.size()-1);
       for (int i = 0; i < vertices.size(); i++) {
-        tmpVertices.add(years.indexOf(vertices.get(i)));
+        double currentVertex = vertices.get(i);
+        if (Double.compare(currentVertex, startYear) <= 0 ) {
+          if (!firstVertexOutOfRange) {
+            tmpVertices.add(0);
+            firstVertexOutOfRange = true;
+          }
+        }
+        else if (Double.compare(currentVertex, endYear) >= 0) {
+          tmpVertices.add(years.size()-1);
+          break;
+        }
+        else {
+          tmpVertices.add(years.indexOf(currentVertex));
+        }
+      }
+
+      // if there are no vertex or only one vertex remains, no solution.
+      if (tmpVertices.size() < 2) {
+        double[] nan = new double[x.size()];
+        Arrays.fill(nan, Double.NaN);
+        return nan;
       }
 
       model = new ModelNormal(tmpVertices, times, values, valuesMean);
@@ -185,10 +216,10 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
         result = new double[x.size()];
         for (int i = 0; i < x.size(); i++) {
-          if (x.get(i) < years.get(0)) {
+          if (x.get(i) <= years.get(0)) {
             result[i] = model.yFitted[0];
           }
-          else if (x.get(i) > years.get(years.size()-1)) {
+          else if (x.get(i) >= years.get(years.size()-1)) {
             result[i] = model.yFitted[years.size()-1];
           }
           else {
