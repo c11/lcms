@@ -138,6 +138,14 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       //Sept 2. If start year is before the first vertex or end year is after the vertex
       // they are excluded from FTV, but will be assigned to the start or end value from
       // the FTV output based on [minYear, maxYear] from vertices.
+
+      // if there are no vertex or only one vertex, no solution.
+      if (vertices.size() <= 1) {
+        double[] nan = new double[x.size()];
+        Arrays.fill(nan, Double.NaN);
+        return nan;
+      }
+
       double startVertexYear = vertices.get(0);
       double endVertexYear = vertices.get(vertices.size()-1);
       for (int i = 0; i < y.size(); i++) {
