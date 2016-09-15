@@ -184,7 +184,8 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       //vertices is actual year, need to convert them to indices in x.
       //the following line is placeholder, need to fix!!!
       List<Integer> tmpVertices = new ArrayList<>();
-
+      List<Double> droppedVertices = new ArrayList<>();
+      
       // construct from vertices;
       boolean firstVertexOutOfRange = false;
       double startYear = years.get(0);
@@ -202,7 +203,34 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
           break;
         }
         else {
-          tmpVertices.add(years.indexOf(currentVertex));
+          int vidx = years.indexOf(currentVertex);
+          //For some reason, the vertex year have not spectral value
+          if (vidx == -1) {
+            //is previous year a vertex
+            int offset = 1;
+            //Only allow it to search for 2 years on either side, there is no need to keep it otherwise.
+            while (offset++ < 3) {
+              if (years.indexOf(currentVertex-offset) > 0 &&
+                      vertices.indexOf(currentVertex-offset) == -1 &&
+                      droppedVertices.indexOf(currentVertex-offset)==-1) {
+                vidx = years.indexOf(currentVertex-offset);
+                vertices.set(i, currentVertex-offset); //update for future reference
+                droppedVertices.add(currentVertex);
+                break;
+              }
+              else if (years.indexOf(currentVertex+offset) > 0 &&
+                      vertices.indexOf(currentVertex+offset) == -1 &&
+                      droppedVertices.indexOf(currentVertex+offset) == -1) {
+                vidx = years.indexOf(currentVertex+offset);
+                vertices.set(i, currentVertex+offset);
+                droppedVertices.add(currentVertex);
+                break;
+              }
+            }
+          }
+          if (vidx != -1) {
+            tmpVertices.add(vidx);
+          }
         }
       }
 
