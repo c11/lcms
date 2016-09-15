@@ -209,7 +209,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
             //is previous year a vertex
             int offset = 1;
             //Only allow it to search for 2 years on either side, there is no need to keep it otherwise.
-            while (offset++ < 3) {
+            while (offset < 3) {
               if (years.indexOf(currentVertex-offset) > 0 &&
                       vertices.indexOf(currentVertex-offset) == -1 &&
                       droppedVertices.indexOf(currentVertex-offset)==-1) {
@@ -227,6 +227,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
                 break;
               }
             }
+            offset++;
           }
           if (vidx != -1) {
             tmpVertices.add(vidx);
