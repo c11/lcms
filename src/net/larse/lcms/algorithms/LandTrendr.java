@@ -209,26 +209,39 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
             //is previous year a vertex
             int offset = 1;
             //Only allow it to search for 2 years on either side, there is no need to keep it otherwise.
-            while (offset < 3) {
-              if (years.indexOf(currentVertex-offset) > 0 &&
-                      vertices.indexOf(currentVertex-offset) == -1 &&
-                      droppedVertices.indexOf(currentVertex-offset)==-1) {
-                vidx = years.indexOf(currentVertex-offset);
-                vertices.set(i, currentVertex-offset); //update for future reference
-                droppedVertices.add(currentVertex);
-                break;
-              }
-              else if (years.indexOf(currentVertex+offset) > 0 &&
-                      vertices.indexOf(currentVertex+offset) == -1 &&
-                      droppedVertices.indexOf(currentVertex+offset) == -1) {
-                vidx = years.indexOf(currentVertex+offset);
-                vertices.set(i, currentVertex+offset);
-                droppedVertices.add(currentVertex);
-                break;
-              }
+            int prevFirst = 1; //whether to search previous years first, default is true
+            if (i == 0) { //this is first vertex
+              prevFirst = -1;
             }
-            offset++;
+            else if (i == vertices.size()-1) { // this is last vertex
+              prevFirst = 1;
+            }
+            else {
+              prevFirst = (currentVertex - vertices.get(i-1)) < (vertices.get(i+1) - currentVertex) ? -1 : 1;
+            }
+
+            while (offset < 3) {
+              int toffset = offset * prevFirst;
+              if (years.indexOf(currentVertex-toffset) > 0 &&
+                      vertices.indexOf(currentVertex-toffset) == -1 &&
+                      droppedVertices.indexOf(currentVertex-toffset)==-1) {
+                vidx = years.indexOf(currentVertex-toffset);
+                vertices.set(i, currentVertex-toffset); //update for future reference
+                droppedVertices.add(currentVertex);
+                break;
+              }
+              else if (years.indexOf(currentVertex+toffset) > 0 &&
+                      vertices.indexOf(currentVertex+toffset) == -1 &&
+                      droppedVertices.indexOf(currentVertex+toffset) == -1) {
+                vidx = years.indexOf(currentVertex+toffset);
+                vertices.set(i, currentVertex+toffset);
+                droppedVertices.add(currentVertex);
+                break;
+              }
+              offset++;
+            }
           }
+
           if (vidx != -1) {
             tmpVertices.add(vidx);
           }
