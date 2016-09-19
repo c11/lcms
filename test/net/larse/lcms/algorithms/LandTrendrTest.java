@@ -337,6 +337,77 @@ public class LandTrendrTest {
     assertTrue(compareArray(ftv, expected, 3));
   }
 
+  @Test
+  /**
+   * test vertex year is missing from the fitting data
+   */
+  public void testMissingVertex() throws Exception {
+    x = new double[] {1984, 1985,
+            1986, 1987, 1988, 1989, 1990,
+            1991, 1992, 1993, 1994, 1995,
+            1996, 1997, 1998, 1999, 2000,
+            2001, 2002, 2003, 2004, 2005,
+            2006, 2007, 2008, 2009, 2010,
+            2011, 2012};
+    vertices = new double[] {1984, 1986, 1993, 1994, 2004, 2012};
+
+    y = new double[] {796, 450,
+            Double.NaN, 183, 190, 318, Double.NaN,
+            434, 465, 433, 616, 605,
+            611, 584, 640, 645, 615,
+            Double.NaN, 666, 637, 620, 705,
+            648, 652, 699, 637, 667,
+            728, 730};
+
+    // Since there is no 1986 value in y, the vertex of 1986 should be shifted to 1987. The following are
+    // fitted value with 1987 as vertex
+    double[] fixedVertices = new double[] {1984, 1987, 1993, 1994, 2004, 2012};
+    double[] expected = lts.getFTVResult(new DoubleArrayList(fixedVertices), new DoubleArrayList(x), new DoubleArrayList(y));
+
+    double[] ftv = lts.getFTVResult(new DoubleArrayList(vertices), new DoubleArrayList(x), new DoubleArrayList(y));
+
+    //due to rounding error between Java and IDL,
+    //allow the results to be different by 3 units in these testing,
+    //that is 0.0003 difference in reflectance
+    assertTrue(compareArray(ftv, expected, 3));
+  }
+
+
+  @Test
+  /**
+   * test multiple vertex years are missing from the fitting data
+   */
+  public void testMissingVertex2() throws Exception {
+    x = new double[] {1984, 1985,
+            1986, 1987, 1988, 1989, 1990,
+            1991, 1992, 1993, 1994, 1995,
+            1996, 1997, 1998, 1999, 2000,
+            2001, 2002, 2003, 2004, 2005,
+            2006, 2007, 2008, 2009, 2010,
+            2011, 2012};
+    vertices = new double[] {1984, 1986, 1993, 1994, 2004, 2012};
+
+    y = new double[] {796, 450,
+            Double.NaN, 183, 190, 318, Double.NaN,
+            434, 465, Double.NaN, Double.NaN, 605,
+            611, 584, 640, 645, 615,
+            Double.NaN, 666, 637, 620, 705,
+            648, 652, 699, 637, 667,
+            728, 730};
+
+    // Since there is no 1986, 1993, 1994 value in y, three vertices should be shifted
+    double[] fixedVertices = new double[] {1984, 1987, 1992, 1995, 2004, 2012};
+    double[] expected = lts.getFTVResult(new DoubleArrayList(fixedVertices), new DoubleArrayList(x), new DoubleArrayList(y));
+
+    double[] ftv = lts.getFTVResult(new DoubleArrayList(vertices), new DoubleArrayList(x), new DoubleArrayList(y));
+
+    //due to rounding error between Java and IDL,
+    //allow the results to be different by 3 units in these testing,
+    //that is 0.0003 difference in reflectance
+    assertTrue(compareArray(ftv, expected, 3));
+  }
+
+
   private boolean compareArray(double[] result, double[] expected, double epsilon) {
     boolean pass = true;
 
