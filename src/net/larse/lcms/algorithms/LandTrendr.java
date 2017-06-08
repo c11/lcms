@@ -404,6 +404,8 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       public double fStat;
       // the p-value of the model.
       public double pValue;
+      // rmse
+      public double rmse;
       // the max(yFitted) - min(yFitted), a value used when checking the slopes
       // of the model.
       protected double yFittedRange;
@@ -481,6 +483,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
         this.fStat = fStat;
         this.pValue = pValue < pzero ? pzero : pValue;
+        this.rmse = Math.sqrt(sumOfSquaresResidual / y.length);
       }
 
       /**
