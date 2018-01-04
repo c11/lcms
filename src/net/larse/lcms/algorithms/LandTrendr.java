@@ -177,7 +177,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       for (int i = 0; i < nObs; i++) {
         // subtract the minimum year (the collection was sorted before)
         times[i] = years.get(i) - years.get(0);
-        valuesMean += values.get(i);
+        valuesMean += values[i];
       }
       valuesMean /= nObs;
 
