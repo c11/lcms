@@ -171,15 +171,15 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       double[] times = years.toDoubleArray();
       double valuesMean = 0.0;
 
+      // apply the smoothing algorithm
+      desawtooth(values, spikeThreshold);
+
       for (int i = 0; i < nObs; i++) {
         // subtract the minimum year (the collection was sorted before)
         times[i] = years.get(i) - years.get(0);
-        valuesMean += rawValues.get(i);
+        valuesMean += values.get(i);
       }
       valuesMean /= nObs;
-
-      // apply the smoothing algorithm
-      desawtooth(values, spikeThreshold);
 
       //vertices is actual year, need to convert them to indices in x.
       //the following line is placeholder, need to fix!!!
@@ -338,15 +338,15 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
           times[i] = years.get(i) - years.get(0);
         }
 
+        // apply the smoothing algorithm
+        desawtooth(values, spikeThreshold);
+
         // pre-calculates the mean of the values.
         double valuesMean = 0.0;
         for (int i = 0; i < values.length; i++) {
           valuesMean += values[i];
         }
         valuesMean /= values.length;
-
-        // apply the smoothing algorithm
-        desawtooth(values, spikeThreshold);
 
         // identify the potential vertices (in total there will be
         // maxSegments + 1 + vertexCountOvershoot vertices)
