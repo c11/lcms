@@ -257,6 +257,12 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
 
       model = new ModelNormal(tmpVertices, times, values, valuesMean);
 
+      if (model.pValue > pvalThreshold) {
+        model = identifyBestModelsUsingLevenbergMarquardt(times, values,
+                valuesMean, tmpVertices, recoveryThreshold,
+                bestModelProportion);
+      }
+
       double[] result = model.yFitted;
 
       //if there are data being filtered out.
