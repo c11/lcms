@@ -258,9 +258,13 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
       model = new ModelNormal(tmpVertices, times, values, valuesMean);
 
       if (model.pValue > pvalThreshold) {
-        model = identifyBestModelsUsingLevenbergMarquardt(times, values,
-                valuesMean, tmpVertices, recoveryThreshold,
-                bestModelProportion);
+        LevenbergMarquardtOptimizer optimizer = new LevenbergMarquardtOptimizer();
+        CurveFitter fitter = new CurveFitter(optimizer);
+        for (int i = 0; i < times.length; i++) {
+          fitter.addObservedPoint(times[i], values[i]);
+        }
+
+        model = new ModelLM(tmpVertices, times, values, fitter, valuesMean);
       }
 
       double[] result = model.yFitted;
