@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Zhiqiang Yang, Noel Gorelick.
+ * Copyright (c) 2015 Zhiqiang Yang.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,13 +30,7 @@ package net.larse.lcms.helper;
  * @author Yasser Ganjisaffar (http://www.ics.uci.edu/~yganjisa/)
  *     <p>Yang Z. modified to fit calculation needs for CCDC.
  */
-public class LassoFitGenerator {
-  // In order to speed up the compression, we limit the number of
-  // observations, but this limit is dependent on the number of features that we should
-  // learn their weights. In other words, for learning weights of more features, we
-  // need more observations.
-  private static final int MAX_OBSERVATIONS_TO_FEATURES_RATIO = 200;
-
+public class LassoFitGenerator extends FitGenerator {
   private static final double EPSILON = 1.0e-6;
 
   // The default number of lambda values to use
@@ -55,8 +49,17 @@ public class LassoFitGenerator {
   private double[][] observations;
   private int numFeatures;
   private int numObservations;
+  private int maxIterations;
+  private double targetLambda;
 
-  public void init(int maxNumFeatures, int numObservations) throws Exception {
+  public LassoFitGenerator(int maxIterations, double targetLambda) {
+    super();
+    this.maxIterations = maxIterations;
+    this.targetLambda = targetLambda;
+  }
+
+  @Override
+  public void init(int maxNumFeatures, int numObservations) {
     this.numFeatures = maxNumFeatures;
     this.numObservations = numObservations;
     observations = new double[this.numObservations][];
@@ -66,28 +69,20 @@ public class LassoFitGenerator {
     targets = new double[this.numObservations];
   }
 
-
+  @Override
   public void setObservation(int idx, int feature, double value) {
     observations[feature][idx] = value;
   }
 
-  public void setObservationValues(int idx, double[] values) {
-    for (int f = 0; f < numFeatures; f++) {
-      observations[f][idx] = values[f];
-    }
-  }
-
-  public void setTargets(double[] targets) {
-    for (int i = 0; i < numObservations; i++) {
-      this.targets[i] = targets[i];
-    }
-  }
-
+  @Override
   public void setTarget(int idx, double target) {
     this.targets[idx] = target;
   }
 
-  public LassoFit fit(double targetLambda) {
+  @Override
+  public boolean isLinear() { return false; }
+
+  public LassoFit lassoFit() {
     int numberOfLambdas = DEFAULT_NUMBER_OF_LAMBDAS;
     int maxAllowedFeaturesAlongPath = numFeatures;
 
@@ -253,7 +248,11 @@ public class LassoFitGenerator {
                       * delta;
             }
           }
-        } while (maxDelta >= CONVERGENCE_THRESHOLD);
+        } while (maxDelta >= CONVERGENCE_THRESHOLD && fit.numberOfPasses < maxIterations);
+
+        if (fit.numberOfPasses >= maxIterations) {
+          break;
+        }
 
         for (int ii = 0; ii < numberOfInputs; ii++) {
           denseActiveSet[ii] = activeWeights[fit.indices[ii]] - denseActiveSet[ii];
@@ -267,7 +266,7 @@ public class LassoFitGenerator {
         }
       }
 
-      if (numberOfInputs > maxAllowedFeaturesAlongPath) {
+      if (numberOfInputs > maxAllowedFeaturesAlongPath || fit.numberOfPasses >= maxIterations) {
         break;
       }
       if (numberOfInputs > 0) {
@@ -289,7 +288,7 @@ public class LassoFitGenerator {
       fit.lambdas[iteration - 1] = curLambda;
       fit.numberOfLambdas = iteration;
 
-      if (iteration < minimumNumberOfLambdas) {
+      if (iteration < minimumNumberOfLambdas) { // && curLambda > targetLambda) {
         continue;
       }
 

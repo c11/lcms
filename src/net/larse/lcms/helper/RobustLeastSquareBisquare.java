@@ -22,7 +22,7 @@
 
 package net.larse.lcms.helper;
 
-import java.util.Objects;
+import java.util.Arrays;
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
 import org.apache.commons.math.stat.descriptive.moment.StandardDeviation;
 import org.ejml.alg.dense.decomposition.qr.QRColPivDecompositionHouseholderColumn_D64;
@@ -31,8 +31,6 @@ import org.ejml.factory.LinearSolverFactory;
 import org.ejml.interfaces.linsol.LinearSolver;
 import org.ejml.ops.CommonOps;
 import org.ejml.ops.MatrixFeatures;
-
-import java.util.Arrays;
 
 /**
  * Version of RobustLeastSquares that implements bisquare error function.

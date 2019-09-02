@@ -20,43 +20,45 @@
  * THE SOFTWARE.
  */
 
-package com.google.earthengine.lib.common;
+package net.larse.lcms.helper;
 
-import com.google.common.base.Preconditions;
-import com.google.earthengine.api.task.SizeOf;
+//import com.google.common.base.Preconditions;
+//import com.google.earthengine.api.task.SizeOf;
 
-import org.ejml.alg.dense.linsol.LinearSolver;
-import org.ejml.alg.dense.linsol.LinearSolverFactory;
+//import org.ejml.alg.dense.linsol.LinearSolver;
+//import org.ejml.alg.dense.linsol.LinearSolverFactory;
 import org.ejml.data.DenseMatrix64F;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import org.ejml.factory.LinearSolverFactory;
+import org.ejml.interfaces.linsol.LinearSolver;
 
 /**
  * Computes a multivariate linear regression via ordinary least squares.
  */
-public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
+public class LinearLeastSquares implements Serializable{ //, SizeOf.Measurable {
   private static final long serialVersionUID = 1;
 
-  private static final long OBJ_SIZE =
-      SizeOf.object(SizeOf.BOOLEAN + 6 * SizeOf.PTR + 3 * SizeOf.INT);
-
-  // The following values were based on cursory examination of the EJML source.
-  // They may not be exactly right (and may become less right after future
-  // revisions of that code), but they should be close enough to make the
-  // results useful.
-  private static final long DENSE_MATRIX_OBJ_SIZE =
-      SizeOf.object(2 * SizeOf.INT + SizeOf.PTR);
-  private static final long CHOLESKY_DECOMPOSITION_OBJ_SIZE =
-      SizeOf.object(2 * SizeOf.INT + 4 * SizeOf.PTR);
-  private static final long LINEAR_SOLVER_OBJ_SIZE =
-      SizeOf.object(3 * SizeOf.INT + 4 * SizeOf.PTR);
-
-  private static long linearSolverHeapSize(int x) {
-    return LINEAR_SOLVER_OBJ_SIZE
-           + CHOLESKY_DECOMPOSITION_OBJ_SIZE
-           + SizeOf.array(x * SizeOf.DOUBLE);
-  }
+//  private static final long OBJ_SIZE =
+//      SizeOf.object(SizeOf.BOOLEAN + 6 * SizeOf.PTR + 3 * SizeOf.INT);
+//
+//  // The following values were based on cursory examination of the EJML source.
+//  // They may not be exactly right (and may become less right after future
+//  // revisions of that code), but they should be close enough to make the
+//  // results useful.
+//  private static final long DENSE_MATRIX_OBJ_SIZE =
+//      SizeOf.object(2 * SizeOf.INT + SizeOf.PTR);
+//  private static final long CHOLESKY_DECOMPOSITION_OBJ_SIZE =
+//      SizeOf.object(2 * SizeOf.INT + 4 * SizeOf.PTR);
+//  private static final long LINEAR_SOLVER_OBJ_SIZE =
+//      SizeOf.object(3 * SizeOf.INT + 4 * SizeOf.PTR);
+//
+//  private static long linearSolverHeapSize(int x) {
+//    return LINEAR_SOLVER_OBJ_SIZE
+//           + CHOLESKY_DECOMPOSITION_OBJ_SIZE
+//           + SizeOf.array(x * SizeOf.DOUBLE);
+//  }
 
   /**
    * Returns an (approximate) upper bound on the heap size of a
@@ -65,16 +67,16 @@ public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
    * called; if you have only called addInput() the heap size
    * will be lower.
    */
-  public static long heapSize(int numX, int numY) {
-    // Compare with the heapSize() instance method.
-    return OBJ_SIZE
-           + SizeOf.array(SizeOf.DOUBLE * numX * (numX + 1) / 2)
-           + SizeOf.array(SizeOf.DOUBLE * numY * numX)
-           + SizeOf.array(SizeOf.DOUBLE * numY)
-           + SizeOf.denseMatrix64F(numX, numX)
-           + DENSE_MATRIX_OBJ_SIZE
-           + linearSolverHeapSize(numX);
-  }
+//  public static long heapSize(int numX, int numY) {
+//    // Compare with the heapSize() instance method.
+//    return OBJ_SIZE
+//           + SizeOf.array(SizeOf.DOUBLE * numX * (numX + 1) / 2)
+//           + SizeOf.array(SizeOf.DOUBLE * numY * numX)
+//           + SizeOf.array(SizeOf.DOUBLE * numY)
+//           + SizeOf.denseMatrix64F(numX, numX)
+//           + DENSE_MATRIX_OBJ_SIZE
+//           + linearSolverHeapSize(numX);
+//  }
 
   public final int numX;
   public final int numY;
@@ -108,7 +110,7 @@ public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
    * to the first.
    */
   public LinearLeastSquares(int numX, int numY) {
-    Preconditions.checkArgument(numX >= 1 && numY >= 1);
+//    Preconditions.checkArgument(numX >= 1 && numY >= 1);
     this.numX = numX;
     this.numY = numY;
     this.xSums = new double[numX * (numX + 1) / 2];
@@ -116,14 +118,14 @@ public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
     this.y2Sums = new double[numY];
   }
 
-  @Override
-  public long heapSize() {
-    return OBJ_SIZE
-           + SizeOf.array(xSums) + SizeOf.array(ySums) + SizeOf.array(y2Sums)
-           + (xMat == null ? 0 : SizeOf.denseMatrix64F(numX, numX))
-           + (yMat == null ? 0 : DENSE_MATRIX_OBJ_SIZE)
-           + (solver == null ? 0 : linearSolverHeapSize(numX));
-  }
+//  @Override
+//  public long heapSize() {
+//    return OBJ_SIZE
+//           + SizeOf.array(xSums) + SizeOf.array(ySums) + SizeOf.array(y2Sums)
+//           + (xMat == null ? 0 : SizeOf.denseMatrix64F(numX, numX))
+//           + (yMat == null ? 0 : DENSE_MATRIX_OBJ_SIZE)
+//           + (solver == null ? 0 : linearSolverHeapSize(numX));
+//  }
 
   // If the input is written as two matrices, with each
   // row corresponding to an observation:
@@ -240,10 +242,10 @@ public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
    * the correct size in which to store the residuals.
    */
   public void getRmsResiduals(DenseMatrix64F results, double[] residuals) {
-    Preconditions.checkState(solved);
-    Preconditions.checkArgument(residuals.length == numY
-        && results.getNumRows() == numX
-        && results.getNumCols() == numY);
+//    Preconditions.checkState(solved);
+//    Preconditions.checkArgument(residuals.length == numY
+//        && results.getNumRows() == numX
+//        && results.getNumCols() == numY);
     for (int i = 0; i < numY; ++i) {
       double sumSq = y2Sums[i];
       for (int j = 0; j < numX; ++j) {
@@ -279,7 +281,7 @@ public class LinearLeastSquares implements Serializable, SizeOf.Measurable {
    * the state of the other solver.
    */
   public void addInputsOf(LinearLeastSquares other) {
-    Preconditions.checkArgument(other.numX == numX && other.numY == numY);
+//    Preconditions.checkArgument(other.numX == numX && other.numY == numY);
     numInputs += other.numInputs;
     add(xSums, other.xSums);
     add(ySums, other.ySums);
