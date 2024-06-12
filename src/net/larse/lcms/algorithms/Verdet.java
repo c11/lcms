@@ -16,7 +16,7 @@ import java.util.Arrays;
  * is implemented in this class. I am considering spatial segmentation as a preprocessing
  * step to achieve spatial cohesive pixel blocks.
  *
- * @auther Zhiqiang Yang, 04/1/2015
+ * @author Zhiqiang Yang, 04/1/2015
  *
  * In this implementation, the parameter names are kept the same as the original code to
  * maintain easy cross check. They should be change to more meaningful names afterwards.
@@ -86,7 +86,7 @@ public final class Verdet {
   public double[] getResult(double[] a) {
     init(a.length);
 
-    //Fixe negative scores
+    //Fixes negative scores
     for (int i = 0; i < a.length; i++) {
       a[i] = a[i] < 0.0 ? 1e-5 : a[i];
     }
@@ -126,7 +126,7 @@ public final class Verdet {
     //TODO: should this be a parameter?
     double dx = 0.005;
 
-    //Orignal Matlab code use loop to iterate the multi-dimensional G
+    //Original Matlab code use loop to iterate the multi-dimensional G
     //TODO: check to see if the multi-dimensional data are necessary
     Arrays.fill(T1, 0);
     Arrays.fill(cc, 0);
@@ -141,7 +141,7 @@ public final class Verdet {
       System.arraycopy(T, 0, T1, 0, size);
 
       //TODO: the follow section can be optimized to remove unnecessary array
-      //I think most of them can be simplied to use just local variables.
+      //I think most of them can be simplified to use just local variables.
 
       Arrays.fill(C, 0);
       C[0] = 1;
@@ -235,7 +235,7 @@ public final class Verdet {
     CommonOps.multTransA(A, A, AtA);
     copy(AtA, ataClone);
 
-    //Orignal Matlab code use loop to iterate the multi-diemsional X
+    //Original Matlab code use loop to iterate the multi-dimensional X
     for (int i = 0; i < size; i++) {
       f.set(i, X[i] - X[0]);
     }

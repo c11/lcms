@@ -894,7 +894,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
      * year of recovery, prevents the algorithm from choosing it and instead
      * takes the next largest outlier.
      * @return the index of the largest outlier in the given segment. In the
-     * case that preventOneYearRecovery is set to true and there is onyl one
+     * case that preventOneYearRecovery is set to true and there is only one
      * vertex between the end-points, it's possible that the return value may be
      * -1, indicating that this segment should not be broken into two by the
      * identifyPotentialVertices() method.
@@ -1016,7 +1016,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
      *  @param y are the observations values;
      *  @param idx indicates which vertex has its angle being measured;
      *  @param potentialVertices is used to provide the information of which
-     *  vertexes are neighbors to the one indicated by idx;
+     *  vertices are neighbors to the one indicated by idx;
      *  @param range of the spectral values;
      *  @param weightFactor is used to weight angles.
      */
@@ -1261,7 +1261,7 @@ public class LandTrendr { // extends ImageConstructor<LandTrendr.Args> {
             return models[index];
           } else {
             // if the model was not suitable, then change its p-value and
-            // f-statistic so it wont be chosen again.
+            // f-statistic so it won't be chosen again.
             pValues[index] = 1.0;
             models[index].pValue = 1.0;
             models[index].fStat = 0.0;

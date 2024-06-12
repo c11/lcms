@@ -166,7 +166,7 @@ public final class Ewmacd {
 
     //first estimate historical mean of residuals (should be near 0)
     // NG: This isn't a mean.
-    // YZ: This is an legacy copy fro original code, Orignal implemneted calcuated the mean, but was never used.
+    // YZ: This is an legacy copy from original code, Original calculated the mean, but was never used.
     // it is standard deviation that we want.
     double historicalStd = new StandardDeviation().evaluate(trainingResiduals);
 
@@ -354,7 +354,7 @@ public final class Ewmacd {
             1, matrix.getColumnDimension() - 1)
             .getData());
 
-    //check residual from first pass of harmonic funciton
+    //check residual from first pass of harmonic function
     double[] residuals = ols.estimateResiduals();
     // NG: Folded together.
     double limit = new StandardDeviation().evaluate(residuals) * args.xBarLimit1;

@@ -88,7 +88,7 @@ public class LassoFit {
   /**
    * find the index corresponding to specified lambda
    *
-   * <p>lambdas are stored in decending order.
+   * <p>lambdas are stored in descending order.
    *
    * @param lambda
    * @return
