@@ -125,7 +125,7 @@ public class Ccdc {
     @Optional
     public int minObservations = 6;
 
-    @Doc(help = "Chi-square probability threshold for change detection in the range of [0, 1]")
+    @Doc(help = "Chi-square probability threshold for change detection in the range of [0, 1].")
     @Optional
     public double chiSquareProbability = 0.99;
 
@@ -888,7 +888,7 @@ public class Ccdc {
         // % initial model fit when there are not many obs
         if (oldTime == 0 || iSpan <= MAX_NUM_COEFFS * N_TIMES) {
 
-          // % update oldTime at each interation because observations may have been removed.
+          // % update oldTime at each iteration because observations may have been removed.
           oldTime = timeSpan(model.endIndex, model.startIndex);
 
           computeFit(fit, updateNumC, model.startIndex, model.endIndex);
@@ -902,7 +902,7 @@ public class Ccdc {
           oldEnd = model.endIndex;
         } else {
           if (timeSpan(model.endIndex, model.startIndex) >= args.minNumOfYearsScaler * oldTime) {
-            // % update oldTime at each interation because observations may have been removed.
+            // % update oldTime at each iteration because observations may have been removed.
             oldTime = timeSpan(model.endIndex, model.startIndex);
 
             computeFit(fit, updateNumC, model.startIndex, model.endIndex);
