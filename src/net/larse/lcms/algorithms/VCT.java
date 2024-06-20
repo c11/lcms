@@ -332,7 +332,7 @@ public class VCT {
     // Also, look for spikes and dips that may be unflagged cloud and
     // shadow and set the QA flag accordingly
 
-    //check the begining
+    //check the beginning
     if ((this.mask[0] != 0 && this.mask[0] <= FILL_CLASSES) || isBadEndpoint(0, 1)) {
       this.qFlag[0] = QA_BAD;
       badCount++;
@@ -697,7 +697,7 @@ public class VCT {
       return;
     }
 
-    // Only one segment identfied - persistent forest
+    // Only one segment identified - persistent forest
     if (this.numDist == 0) {
       this.lcType = PERM_FOREST;
     }
@@ -1268,7 +1268,7 @@ public class VCT {
     }
 
     // Sort these differences and find the index 1/10 in from the left
-    // constrained betweeen indexes 1 and 3 inclusive; 
+    // constrained between indexes 1 and 3 inclusive; 
     // return the absolute value of this pair's difference
     Arrays.sort(tmpData);
     int tmpIdx = (int) (numVals * 0.1);

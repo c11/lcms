@@ -23,7 +23,7 @@
 package net.larse.lcms.helper;
 
 /**
- * This implemenation is based on: Friedman, J., Hastie, T. and Tibshirani, R. (2008) Regularization
+ * This implementation is based on: Friedman, J., Hastie, T. and Tibshirani, R. (2008) Regularization
  * Paths for Generalized Linear Models via Coordinate Descent.
  * http://www-stat.stanford.edu/~hastie/Papers/glmnet.pdf
  *

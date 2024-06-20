@@ -39,12 +39,12 @@ import java.util.Collections;
  * with Routines for Constrained Regression. Journal of Statistical Software, 61(12), 1-22.
  * URL http://www.jstatsoft.org/v61/i12/.
  *
- * @auther Zhiqiang Yang, 2/17/2015
+ * @author Zhiqiang Yang, 2/17/2015
  *
  * TODO: this is the first pass of implementing the algorithms, there are a lot of redundant code,
  * which can be solidated to simplify the implementation.
  *
- * The three projection codes share a lot of commond code, there should be a way to simplify the logic.
+ * The three projection codes share a lot of common code, there should be a way to simplify the logic.
  *
  */
 public class ConeProj {
